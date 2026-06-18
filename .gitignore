@@ -1,0 +1,17 @@
+.build/
+dist/
+work/
+outputs/
+.codex/
+docs/superpowers/
+.DS_Store
+
+*.swp
+*.tmp
+*.log
+.env
+*.key
+*.p8
+*.mobileprovision
+*.xcuserstate
+xcuserdata/

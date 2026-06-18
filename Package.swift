@@ -4,6 +4,7 @@ import PackageDescription
 
 let package = Package(
     name: "ClaudeCodeSwitcher",
+    defaultLocalization: "zh-Hans",
     platforms: [
         .macOS(.v14)
     ],
@@ -24,6 +25,9 @@ let package = Package(
         .executableTarget(
             name: "ClaudeCodeSwitcherApp",
             dependencies: ["ClaudeCodeSwitcherCore"],
+            resources: [
+                .process("Resources")
+            ],
             linkerSettings: [
                 .linkedFramework("Security")
             ]

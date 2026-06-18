@@ -32,6 +32,11 @@ stage_bundle() {
   if [[ -f "$APP_ICON_SOURCE" ]]; then
     cp "$APP_ICON_SOURCE" "$APP_RESOURCES/AppIcon.icns"
   fi
+  if [[ -d "$ROOT_DIR/Sources/ClaudeCodeSwitcherApp/Resources" ]]; then
+    find "$ROOT_DIR/Sources/ClaudeCodeSwitcherApp/Resources" -maxdepth 1 -name "*.lproj" -type d | while read -r LPROJ; do
+      cp -R "$LPROJ" "$APP_RESOURCES/"
+    done
+  fi
 
   cat >"$INFO_PLIST" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -51,9 +56,9 @@ stage_bundle() {
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleShortVersionString</key>
-  <string>1.0</string>
+  <string>1.0.1</string>
   <key>CFBundleVersion</key>
-  <string>1</string>
+  <string>2</string>
   <key>LSMinimumSystemVersion</key>
   <string>$MIN_SYSTEM_VERSION</string>
   <key>NSPrincipalClass</key>

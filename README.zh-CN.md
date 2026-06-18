@@ -18,6 +18,7 @@
   - DeepSeek V4 Flash
   - 自定义 Anthropic 兼容后端
 - API Key 保存到 macOS 钥匙串。
+- 界面支持中文和英文切换，默认中文。
 - 检查和更新 Claude Code，不弹终端。
 - 管理 Claude Code Skill：
   - 扫描个人 Skill 和插件 Skill

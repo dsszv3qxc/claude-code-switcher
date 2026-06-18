@@ -20,6 +20,7 @@ It keeps the common presets simple, while still allowing custom Anthropic-compat
   - DeepSeek V4 Flash
   - Custom Anthropic-compatible backends
 - Store API keys in macOS Keychain.
+- Switch the app interface between Chinese and English.
 - Check and update Claude Code without opening Terminal.
 - Manage Claude Code Skills:
   - scan personal and plugin Skills

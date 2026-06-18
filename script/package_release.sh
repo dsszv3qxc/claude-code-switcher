@@ -10,7 +10,7 @@ SHA_PATH="$ZIP_PATH.sha256"
 "$ROOT_DIR/script/build_and_run.sh" --verify
 
 rm -f "$ZIP_PATH" "$SHA_PATH"
-ditto -c -k --keepParent "$APP_BUNDLE" "$ZIP_PATH"
+ditto -c -k --norsrc --noextattr --keepParent "$APP_BUNDLE" "$ZIP_PATH"
 shasum -a 256 "$ZIP_PATH" > "$SHA_PATH"
 
 echo "Created:"

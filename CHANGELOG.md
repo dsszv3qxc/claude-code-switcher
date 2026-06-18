@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.1
+
+- Added an in-app Chinese/English language switcher.
+- Skill usage guidance and generated Skill summaries now follow the selected UI language.
+
 ## 1.0.0
 
 - Added built-in Claude subscription, DeepSeek V4 Pro, and DeepSeek V4 Flash backend profiles.

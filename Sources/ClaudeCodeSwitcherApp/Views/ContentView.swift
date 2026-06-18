@@ -4,6 +4,7 @@ import ClaudeCodeSwitcherCore
 struct ContentView: View {
     @ObservedObject var viewModel: SwitcherViewModel
     @State private var showingUninstallConfirmation = false
+    @AppStorage(SwitcherViewModel.languageDefaultsKey) private var languageID = SwitcherViewModel.defaultLanguageID
 
     var body: some View {
         VStack(alignment: .leading, spacing: 22) {
@@ -16,6 +17,10 @@ struct ContentView: View {
         .padding(.top, 30)
         .padding(.bottom, 28)
         .background(Color(nsColor: .windowBackgroundColor))
+        .environment(\.locale, Locale(identifier: languageID))
+        .onChange(of: languageID) { _, _ in
+            viewModel.languageDidChange()
+        }
         .animation(.easeInOut(duration: 0.18), value: viewModel.selectedProfileID)
         .animation(.easeInOut(duration: 0.18), value: viewModel.isAddingCustomBackend)
         .confirmationDialog("确认卸载这个个人 Skill？", isPresented: $showingUninstallConfirmation) {
@@ -82,11 +87,18 @@ struct ContentView: View {
 
             Picker("", selection: $viewModel.selectedSection) {
                 ForEach(AppSection.allCases) { section in
-                    Text(section.displayName).tag(section)
+                    Text(LocalizedStringKey(section.displayName)).tag(section)
                 }
             }
             .pickerStyle(.segmented)
             .frame(width: 250)
+
+            Picker("", selection: $languageID) {
+                Text("中文").tag("zh-Hans")
+                Text("EN").tag("en")
+            }
+            .pickerStyle(.segmented)
+            .frame(width: 112)
         }
     }
 
@@ -107,7 +119,7 @@ struct ContentView: View {
                 Text("当前生效")
                     .font(.caption.weight(.medium))
                     .foregroundStyle(.secondary)
-                Text(viewModel.currentProfile.displayName)
+                Text(LocalizedStringKey(viewModel.currentProfile.displayName))
                     .font(.title3.weight(.semibold))
             }
 
@@ -190,8 +202,15 @@ struct ContentView: View {
     private var keySection: some View {
         VStack(alignment: .leading, spacing: 13) {
             HStack {
-                Label("\(viewModel.selectedProfile.displayName) API Key", systemImage: "key.fill")
+                Label {
+                    HStack(spacing: 0) {
+                        Text(LocalizedStringKey(viewModel.selectedProfile.displayName))
+                        Text(" API Key")
+                    }
                     .font(.headline)
+                } icon: {
+                    Image(systemName: "key.fill")
+                }
                 Spacer()
                 Button {
                     viewModel.loadSavedKey()
@@ -368,10 +387,10 @@ struct ContentView: View {
                 .frame(width: 16)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(viewModel.versionSummary)
+                Text(LocalizedStringKey(viewModel.versionSummary))
                     .font(.callout.weight(.medium))
                     .foregroundStyle(.primary)
-                Text(viewModel.versionDetail)
+                Text(LocalizedStringKey(viewModel.versionDetail))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
@@ -396,7 +415,7 @@ struct ContentView: View {
         HStack(spacing: 8) {
             Image(systemName: statusIcon)
                 .foregroundStyle(statusColor)
-            Text(viewModel.statusMessage.isEmpty ? "当前模式：\(viewModel.currentProfile.displayName)" : viewModel.statusMessage)
+            Text(LocalizedStringKey(viewModel.statusMessage.isEmpty ? "当前模式：\(viewModel.currentProfile.displayName)" : viewModel.statusMessage))
                 .lineLimit(2)
                 .font(.callout.weight(.medium))
                 .foregroundStyle(.secondary)
@@ -411,6 +430,22 @@ struct ContentView: View {
 
     private var statusColor: Color {
         viewModel.currentProfile.accentColor
+    }
+
+    private var isEnglishUI: Bool {
+        languageID.hasPrefix("en")
+    }
+
+    private var skillCountText: String {
+        let count = "\(viewModel.filteredSkillCount) / \(viewModel.skills.count)"
+        return isEnglishUI ? count : "\(count) 个"
+    }
+
+    private var summaryProviderHelpText: String {
+        if isEnglishUI {
+            return "Summary model: \(viewModel.summaryProviderName)"
+        }
+        return "摘要模型：\(viewModel.summaryProviderName)"
     }
 
     private var skillsContent: some View {
@@ -431,7 +466,7 @@ struct ContentView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("技能库")
                         .font(.subheadline.weight(.semibold))
-                    Text("\(viewModel.filteredSkillCount) / \(viewModel.skills.count) 个")
+                    Text(skillCountText)
                         .font(.caption2.weight(.medium))
                         .foregroundStyle(.secondary)
                 }
@@ -442,25 +477,25 @@ struct ContentView: View {
                     Picker("摘要模型", selection: $viewModel.selectedSummaryProfileID) {
                         Text("关闭自动摘要").tag(SwitcherViewModel.summaryDisabledID)
                         ForEach(viewModel.selectableSummaryProfiles) { profile in
-                            Text(profile.displayName).tag(profile.id)
+                            Text(LocalizedStringKey(profile.displayName)).tag(profile.id)
                         }
                     }
                 } label: {
                     Image(systemName: "text.bubble")
                         .frame(width: 24, height: 24)
-                        .help("摘要模型：\(viewModel.summaryProviderName)")
+                        .help(summaryProviderHelpText)
                 }
                 .menuStyle(.borderlessButton)
 
                 Menu {
                     Picker("分类", selection: $viewModel.selectedSkillCategory) {
                         ForEach(viewModel.skillCategories, id: \.self) { category in
-                            Text(category).tag(category)
+                            Text(LocalizedStringKey(category)).tag(category)
                         }
                     }
                 } label: {
                     HStack(spacing: 4) {
-                        Text(viewModel.selectedSkillCategory)
+                        Text(LocalizedStringKey(viewModel.selectedSkillCategory))
                             .lineLimit(1)
                             .truncationMode(.tail)
                         Image(systemName: "chevron.down")
@@ -523,7 +558,7 @@ struct ContentView: View {
                         ForEach(viewModel.groupedSkills, id: \.category) { group in
                             VStack(alignment: .leading, spacing: 7) {
                                 HStack {
-                                    Text(group.category)
+                                    Text(LocalizedStringKey(group.category))
                                         .font(.caption2.weight(.bold))
                                         .foregroundStyle(.secondary)
                                     Spacer()
@@ -573,7 +608,7 @@ struct ContentView: View {
                 SkillDetailView(
                     skill: skill,
                     summary: viewModel.summaryText(for: skill),
-                    usageText: viewModel.usageText(for: skill),
+                    usageText: viewModel.usageText(for: skill, languageID: languageID),
                     updateState: viewModel.skillUpdateStates[skill.id] ?? .notChecked,
                     isBusy: viewModel.isCheckingSkillUpdates || viewModel.isMutatingSkill,
                     reveal: viewModel.revealSelectedSkill,
@@ -611,7 +646,7 @@ struct ContentView: View {
         HStack(spacing: 8) {
             Image(systemName: "wand.and.stars")
                 .foregroundStyle(.teal)
-            Text(viewModel.skillStatusMessage)
+            Text(LocalizedStringKey(viewModel.skillStatusMessage))
                 .lineLimit(2)
                 .font(.callout.weight(.medium))
                 .foregroundStyle(.secondary)
@@ -653,13 +688,13 @@ private struct SkillRow: View {
                     .fixedSize(horizontal: false, vertical: true)
 
                 HStack(spacing: 7) {
-                    Text(skill.scope.displayName)
+                    Text(LocalizedStringKey(skill.scope.displayName))
                         .font(.caption2.weight(.medium))
                         .foregroundStyle(scopeColor)
                     Text("·")
                         .font(.caption2)
                         .foregroundStyle(.tertiary)
-                    Text(skill.isPaused ? "已暂停" : updateState.label)
+                    Text(LocalizedStringKey(skill.isPaused ? "已暂停" : updateState.label))
                         .font(.caption2.weight(.medium))
                         .foregroundStyle(skill.isPaused ? .orange : .secondary)
                 }
@@ -704,6 +739,8 @@ private struct SkillRow: View {
 }
 
 private struct SkillDetailView: View {
+    @Environment(\.locale) private var locale
+
     let skill: ClaudeSkillRecord
     let summary: String
     let usageText: String
@@ -751,7 +788,7 @@ private struct SkillDetailView: View {
                         DetailField(title: "状态", value: skill.isPaused ? "已暂停" : "启用中", icon: skill.isPaused ? "pause.circle" : "checkmark.circle")
                         DetailField(title: "来源", value: skill.scope.displayName, icon: scopeIcon)
                         DetailField(title: "版本", value: skill.pluginVersion ?? "不适用", icon: "number")
-                        DetailField(title: "支持文件", value: "\(skill.supportingFileCount) 个", icon: "doc")
+                        DetailField(title: "支持文件", value: supportingFileText, icon: "doc")
                         DetailField(title: "名称", value: skill.name, icon: "textformat")
                         DetailField(title: "插件", value: pluginText, icon: "shippingbox")
                     }
@@ -773,9 +810,9 @@ private struct SkillDetailView: View {
                             .foregroundStyle(updateColor)
                             .frame(width: 18)
                         VStack(alignment: .leading, spacing: 3) {
-                            Text(updateState.label)
+                            Text(LocalizedStringKey(updateState.label))
                                 .font(.callout.weight(.medium))
-                            Text(updateState.detail)
+                            Text(LocalizedStringKey(updateState.detail))
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                                 .textSelection(.enabled)
@@ -802,8 +839,12 @@ private struct SkillDetailView: View {
                 Button {
                     togglePaused()
                 } label: {
-                    Label(skill.isPaused ? "恢复使用" : "暂停使用", systemImage: skill.isPaused ? "play.circle" : "pause.circle")
-                        .frame(minWidth: 96)
+                    Label {
+                        Text(LocalizedStringKey(skill.isPaused ? "恢复使用" : "暂停使用"))
+                            .frame(minWidth: 96)
+                    } icon: {
+                        Image(systemName: skill.isPaused ? "play.circle" : "pause.circle")
+                    }
                 }
                 .disabled(isBusy)
 
@@ -890,6 +931,10 @@ private struct SkillDetailView: View {
         return pluginName
     }
 
+    private var supportingFileText: String {
+        locale.identifier.hasPrefix("en") ? "\(skill.supportingFileCount)" : "\(skill.supportingFileCount) 个"
+    }
+
     private var modifiedText: String {
         guard let modifiedAt = skill.modifiedAt else {
             return "未知"
@@ -959,10 +1004,10 @@ private struct DetailField: View {
                 .frame(width: 18, height: 18)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(title)
+                Text(LocalizedStringKey(title))
                     .font(.caption2.weight(.medium))
                     .foregroundStyle(.secondary)
-                Text(value)
+                Text(LocalizedStringKey(value))
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.primary)
                     .lineLimit(2)
@@ -983,7 +1028,7 @@ private struct DetailTextBlock: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
-            Text(title)
+            Text(LocalizedStringKey(title))
                 .font(.caption2.weight(.bold))
                 .foregroundStyle(.secondary)
             Text(value)
@@ -1016,7 +1061,7 @@ private struct ModeCard: View {
                     Spacer()
 
                     if isCurrent {
-                        Text("当前")
+                    Text("当前")
                             .font(.caption2.weight(.bold))
                             .foregroundStyle(profile.accentColor)
                             .padding(.horizontal, 7)
@@ -1026,13 +1071,13 @@ private struct ModeCard: View {
                 }
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(profile.displayName)
+                    Text(LocalizedStringKey(profile.displayName))
                         .font(.system(size: 15, weight: .semibold, design: .rounded))
                         .foregroundStyle(.primary)
                         .lineLimit(1)
                         .minimumScaleFactor(0.85)
 
-                    Text(profile.shortDescription)
+                    Text(LocalizedStringKey(profile.shortDescription))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(2)

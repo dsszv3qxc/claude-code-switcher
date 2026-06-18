@@ -13,7 +13,7 @@ struct SkillSummaryService: Sendable {
             .appendingPathComponent("skill-summaries.json")
     }
 
-    func summary(for skill: ClaudeSkillRecord, provider: BackendProfile?, apiKey: String?) async -> SkillSummaryResult {
+    func summary(for skill: ClaudeSkillRecord, provider: BackendProfile?, apiKey: String?, languageID: String) async -> SkillSummaryResult {
         guard let provider else {
             return .ready(skill.description.isEmpty ? "未生成摘要" : skill.description)
         }
@@ -25,7 +25,7 @@ struct SkillSummaryService: Sendable {
             return .failed("无法读取 Skill 内容，暂时不能生成中文摘要。")
         }
 
-        let fingerprint = Self.fingerprint(for: "\(provider.id)\n\(skillText)")
+        let fingerprint = Self.fingerprint(for: "\(languageID)\n\(provider.id)\n\(skillText)")
         if let cached = cachedSummary(for: fingerprint) {
             return .ready(cached)
         }
@@ -36,7 +36,7 @@ struct SkillSummaryService: Sendable {
         }
 
         do {
-            let summary = try await requestSummary(skill: skill, skillText: skillText, provider: provider, apiKey: apiKey)
+            let summary = try await requestSummary(skill: skill, skillText: skillText, provider: provider, apiKey: apiKey, languageID: languageID)
             try saveCachedSummary(summary, fingerprint: fingerprint)
             return .ready(summary)
         } catch {
@@ -44,7 +44,7 @@ struct SkillSummaryService: Sendable {
         }
     }
 
-    private func requestSummary(skill: ClaudeSkillRecord, skillText: String, provider: BackendProfile, apiKey: String) async throws -> String {
+    private func requestSummary(skill: ClaudeSkillRecord, skillText: String, provider: BackendProfile, apiKey: String, languageID: String) async throws -> String {
         guard let url = messagesURL(for: provider),
               let model = provider.primaryModel?.trimmingCharacters(in: .whitespacesAndNewlines),
               !model.isEmpty else {
@@ -59,23 +59,38 @@ struct SkillSummaryService: Sendable {
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
 
         let clippedSkillText = String(skillText.prefix(4_500))
+        let wantsEnglish = languageID.hasPrefix("en")
         let payload = AnthropicSummaryRequest(
             model: model,
-            system: "你是一个 macOS 工具里的 Skill 管理摘要器。只输出中文，不要 Markdown，不要项目符号。",
+            system: wantsEnglish
+                ? "You summarize Claude Code Skills for a macOS utility. Output concise English only. Do not use Markdown or bullet points."
+                : "你是一个 macOS 工具里的 Skill 管理摘要器。只输出中文，不要 Markdown，不要项目符号。",
             messages: [
                 AnthropicMessage(
                     role: "user",
-                    content: """
-                    请把下面这个 Skill 的用途总结成一小段通俗中文，最多 80 个汉字。
-                    需要说明它主要帮用户完成什么，不要翻译文件路径，不要提“这个 Skill”。
+                    content: wantsEnglish
+                        ? """
+                        Summarize what this Skill helps the user do in one plain-English sentence, under 35 words.
+                        Do not mention file paths. Do not start with "This Skill".
 
-                    名称：\(skill.commandName)
-                    分类：\(skill.category)
-                    原始描述：\(skill.description)
+                        Name: \(skill.commandName)
+                        Category: \(skill.category)
+                        Original description: \(skill.description)
 
-                    SKILL.md：
-                    \(clippedSkillText)
-                    """
+                        SKILL.md:
+                        \(clippedSkillText)
+                        """
+                        : """
+                        请把下面这个 Skill 的用途总结成一小段通俗中文，最多 80 个汉字。
+                        需要说明它主要帮用户完成什么，不要翻译文件路径，不要提“这个 Skill”。
+
+                        名称：\(skill.commandName)
+                        分类：\(skill.category)
+                        原始描述：\(skill.description)
+
+                        SKILL.md：
+                        \(clippedSkillText)
+                        """
                 )
             ],
             temperature: 0.2,

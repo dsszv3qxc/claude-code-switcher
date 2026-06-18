@@ -194,7 +194,11 @@ final class SwitcherViewModel: ObservableObject {
         return "正在生成中文摘要..."
     }
 
-    func usageText(for skill: ClaudeSkillRecord) -> String {
+    func usageText(for skill: ClaudeSkillRecord, languageID: String) -> String {
+        if languageID.hasPrefix("en") {
+            return englishUsageText(for: skill)
+        }
+
         let slashCommand = "/\(skill.commandName)"
         var parts: [String] = []
 
@@ -213,6 +217,11 @@ final class SwitcherViewModel: ObservableObject {
         }
 
         return parts.joined(separator: "\n\n")
+    }
+
+    func languageDidChange() {
+        skillSummaries.removeAll()
+        refreshSkills()
     }
 
     func regenerateSelectedSkillSummary() {
@@ -518,7 +527,12 @@ final class SwitcherViewModel: ObservableObject {
         Task {
             var needsKey = false
             for record in targets {
-                let result = await skillSummaryService.summary(for: record, provider: summaryProfile, apiKey: summaryAPIKey)
+                let result = await skillSummaryService.summary(
+                    for: record,
+                    provider: summaryProfile,
+                    apiKey: summaryAPIKey,
+                    languageID: UserDefaults.standard.string(forKey: Self.languageDefaultsKey) ?? Self.defaultLanguageID
+                )
                 await MainActor.run {
                     skillSummaries[record.id] = result.text
                     if case .needsAPIKey = result {
@@ -589,5 +603,28 @@ final class SwitcherViewModel: ObservableObject {
     static let allSkillCategoriesLabel = "全部分类"
     static let newCustomProfileID = "new.custom.backend"
     static let summaryDisabledID = "summary.disabled"
+    static let defaultLanguageID = "zh-Hans"
+    static let languageDefaultsKey = "AppLanguageID"
     private static let summaryProfileDefaultsKey = "SkillSummaryProfileID"
+
+    private func englishUsageText(for skill: ClaudeSkillRecord) -> String {
+        let slashCommand = "/\(skill.commandName)"
+        var parts: [String] = []
+
+        if skill.isPaused {
+            parts.append("Paused: Claude Code will not discover or invoke this Skill right now. Resume it and new Claude Code sessions will see it again.")
+        }
+
+        if skill.disableModelInvocation {
+            parts.append("Manual use: this Skill disables model invocation. Use \(slashCommand), or explicitly mention \(skill.commandName) in your request.")
+        } else if skill.commandName.lowercased().hasPrefix("superpowers:") {
+            parts.append("Auto-triggered: Superpowers Skills are usually selected by Claude Code based on the task. To force it, use \(slashCommand) or explicitly mention \(skill.commandName).")
+        } else if skill.description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            parts.append("Manual mention recommended: this Skill has no clear description, so Claude Code may not know when to load it. Use \(slashCommand) or mention its name.")
+        } else {
+            parts.append("On-demand: Claude Code uses description/when_to_use to decide whether to load this Skill. To make sure it is used, enter \(slashCommand) or mention \(skill.commandName).")
+        }
+
+        return parts.joined(separator: "\n\n")
+    }
 }

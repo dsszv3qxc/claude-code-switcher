@@ -12,14 +12,14 @@ final class SwitcherViewModel: ObservableObject {
         didSet {
             guard oldValue != selectedSummaryProfileID else { return }
             UserDefaults.standard.set(selectedSummaryProfileID, forKey: Self.summaryProfileDefaultsKey)
-            skillSummaries.removeAll()
-            refreshSkills()
+            loadCachedSkillSummaries(for: skills, languageID: currentLanguageID)
+            skillStatusMessage = .summaryProviderChanged(summaryProviderName(languageID: currentLanguageID))
         }
     }
     @Published var apiKey: String = ""
-    @Published var statusMessage: String = ""
-    @Published var versionSummary: String = "Claude Code 版本：未检查"
-    @Published var versionDetail: String = "检查不会更新或修改 Claude Code。"
+    @Published var statusMessage: AppMessage = .empty
+    @Published var versionSummary: AppMessage = .versionNotChecked
+    @Published var versionDetail: AppMessage = .versionCheckDoesNotModify
     @Published var selectedSection: AppSection = .backend
     @Published var skills: [ClaudeSkillRecord] = []
     @Published var selectedSkillID: ClaudeSkillRecord.ID?
@@ -29,9 +29,9 @@ final class SwitcherViewModel: ObservableObject {
             normalizeSelectedSkill()
         }
     }
-    @Published var skillStatusMessage: String = "Skill：未扫描"
+    @Published var skillStatusMessage: AppMessage = .skillNotScanned
     @Published var skillUpdateStates: [ClaudeSkillRecord.ID: SkillUpdateState] = [:]
-    @Published var skillSummaries: [ClaudeSkillRecord.ID: String] = [:]
+    @Published var skillSummaries: [String: String] = [:]
     @Published var isSummarizingSkills = false
     @Published var isBusy = false
     @Published var isCheckingVersion = false
@@ -135,11 +135,33 @@ final class SwitcherViewModel: ObservableObject {
         backendProfiles.filter(\.needsAPIKey)
     }
 
-    var summaryProviderName: String {
+    func summaryProviderName(languageID: String) -> String {
         guard selectedSummaryProfileID != Self.summaryDisabledID else {
-            return "关闭自动摘要"
+            return AppStrings.text("关闭自动摘要", languageID: languageID)
         }
-        return backendProfiles.first { $0.id == selectedSummaryProfileID }?.displayName ?? "未选择"
+        guard let profile = backendProfiles.first(where: { $0.id == selectedSummaryProfileID }) else {
+            return AppStrings.text("未选择", languageID: languageID)
+        }
+        return AppStrings.profileName(profile, languageID: languageID)
+    }
+
+    func statusText(languageID: String) -> String {
+        if statusMessage == .empty {
+            return AppMessage.currentMode(currentProfile).text(languageID: languageID)
+        }
+        return statusMessage.text(languageID: languageID)
+    }
+
+    func skillStatusText(languageID: String) -> String {
+        skillStatusMessage.text(languageID: languageID)
+    }
+
+    func versionSummaryText(languageID: String) -> String {
+        versionSummary.text(languageID: languageID)
+    }
+
+    func versionDetailText(languageID: String) -> String {
+        versionDetail.text(languageID: languageID)
     }
 
     func refresh() {
@@ -149,9 +171,9 @@ final class SwitcherViewModel: ObservableObject {
             selectedProfileID = currentProfile.id
             isAddingCustomBackend = false
             loadKeyForSelectedProfileIfAvailable()
-            statusMessage = "当前模式：\(currentProfile.displayName)"
+            statusMessage = .currentMode(currentProfile)
         } catch {
-            statusMessage = error.localizedDescription
+            statusMessage = .raw(error.localizedDescription)
         }
     }
 
@@ -161,6 +183,7 @@ final class SwitcherViewModel: ObservableObject {
         defer { isRefreshingSkills = false }
 
         do {
+            let existingSkillIDs = Set(skills.map(\.id))
             let scanned = try skillManager.scan()
             skills = scanned
             skillUpdateStates = Dictionary(
@@ -176,22 +199,30 @@ final class SwitcherViewModel: ObservableObject {
             }
             normalizeSelectedSkill()
 
-            let pausedSuffix = pausedSkillCount > 0 ? "，已暂停 \(pausedSkillCount)" : ""
-            skillStatusMessage = "已扫描 \(scanned.count) 个 Claude Code Skill：个人 \(personalSkillCount)，插件 \(pluginSkillCount)\(pausedSuffix)。"
-            summarizeMissingSkills(scanned)
+            skillStatusMessage = .scannedSkills(
+                total: scanned.count,
+                personal: personalSkillCount,
+                plugin: pluginSkillCount,
+                paused: pausedSkillCount
+            )
+            loadCachedSkillSummaries(for: scanned, languageID: currentLanguageID)
+
+            let newSkills = existingSkillIDs.isEmpty ? [] : scanned.filter { !existingSkillIDs.contains($0.id) }
+            generateSummaries(for: newSkills, languageID: currentLanguageID)
         } catch {
-            skillStatusMessage = error.localizedDescription
+            skillStatusMessage = .raw(error.localizedDescription)
         }
     }
 
-    func summaryText(for skill: ClaudeSkillRecord) -> String {
-        if let summary = skillSummaries[skill.id] {
+    func summaryText(for skill: ClaudeSkillRecord, languageID: String) -> String {
+        if let summary = skillSummaries[summaryKey(for: skill, languageID: languageID)] {
             return summary
         }
-        if selectedSummaryProfileID == Self.summaryDisabledID {
-            return skill.description.isEmpty ? "未生成摘要" : skill.description
-        }
-        return "正在生成中文摘要..."
+        return skill.description.isEmpty ? AppStrings.text("未生成摘要", languageID: languageID) : skill.description
+    }
+
+    func hasGeneratedSummary(for skill: ClaudeSkillRecord, languageID: String) -> Bool {
+        skillSummaries[summaryKey(for: skill, languageID: languageID)] != nil
     }
 
     func usageText(for skill: ClaudeSkillRecord, languageID: String) -> String {
@@ -219,42 +250,41 @@ final class SwitcherViewModel: ObservableObject {
         return parts.joined(separator: "\n\n")
     }
 
-    func languageDidChange() {
-        skillSummaries.removeAll()
-        refreshSkills()
+    func languageDidChange(to languageID: String) {
+        loadCachedSkillSummaries(for: skills, languageID: languageID)
     }
 
-    func regenerateSelectedSkillSummary() {
+    func regenerateSelectedSkillSummary(languageID: String) {
         guard let selectedSkill else { return }
         guard selectedSummaryProfileID != Self.summaryDisabledID else {
-            skillStatusMessage = "自动摘要已关闭。请选择一个摘要模型后再重写摘要。"
+            skillStatusMessage = .autoSummaryOffNeedProvider
             return
         }
-        skillSummaries[selectedSkill.id] = "正在重新生成中文摘要..."
-        summarizeMissingSkills([selectedSkill], force: true)
+        skillSummaries[summaryKey(for: selectedSkill, languageID: languageID)] = AppStrings.text("正在重新生成摘要...", languageID: languageID)
+        generateSummaries(for: [selectedSkill], languageID: languageID, force: true)
     }
 
     func loadSavedKey() {
         do {
             guard selectedProfile.needsAPIKey else {
-                statusMessage = "\(selectedProfile.displayName) 不需要 API Key。"
+                statusMessage = .profileDoesNotNeedKey(selectedProfile)
                 return
             }
             guard let saved = try keychainStore.readAPIKey(for: selectedProfile), !saved.isEmpty else {
-                statusMessage = "钥匙串里还没有保存 \(selectedProfile.displayName) 的 API Key。"
+                statusMessage = .noSavedKey(selectedProfile)
                 return
             }
             apiKey = saved
-            statusMessage = "已从钥匙串读取 \(selectedProfile.displayName) 的 API Key。"
+            statusMessage = .loadedKey(selectedProfile)
         } catch {
-            statusMessage = error.localizedDescription
+            statusMessage = .raw(error.localizedDescription)
         }
     }
 
     func saveKey() {
         do {
             guard selectedProfile.needsAPIKey else {
-                statusMessage = "\(selectedProfile.displayName) 不需要 API Key。"
+                statusMessage = .profileDoesNotNeedKey(selectedProfile)
                 return
             }
             let trimmed = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -262,9 +292,9 @@ final class SwitcherViewModel: ObservableObject {
                 throw SwitcherError.missingAPIKey
             }
             try keychainStore.saveAPIKey(trimmed, for: selectedProfile)
-            statusMessage = "\(selectedProfile.displayName) API Key 已保存到钥匙串。"
+            statusMessage = .savedKey(selectedProfile)
         } catch {
-            statusMessage = error.localizedDescription
+            statusMessage = .raw(error.localizedDescription)
         }
     }
 
@@ -298,9 +328,9 @@ final class SwitcherViewModel: ObservableObject {
             currentProfile = document.detectedProfile(in: backendProfiles)
             selectedProfileID = currentProfile.id
             isAddingCustomBackend = false
-            statusMessage = "已切换到 \(currentProfile.displayName)。新启动的 Claude Code 会使用这个模式。"
+            statusMessage = .switchedMode(currentProfile)
         } catch {
-            statusMessage = error.localizedDescription
+            statusMessage = .raw(error.localizedDescription)
         }
     }
 
@@ -310,8 +340,8 @@ final class SwitcherViewModel: ObservableObject {
         apiKey = ""
         loadKeyForSelectedProfileIfAvailable()
         statusMessage = profile.id == currentProfile.id
-            ? "当前模式：\(profile.displayName)"
-            : "已选择 \(profile.displayName)，点击应用后对新的 Claude Code 会话生效。"
+            ? .currentMode(profile)
+            : .selectedMode(profile)
     }
 
     func beginAddingCustomBackend() {
@@ -319,7 +349,7 @@ final class SwitcherViewModel: ObservableObject {
         selectedProfileID = Self.newCustomProfileID
         customBackendDraft = .example
         apiKey = ""
-        statusMessage = "填写自定义 Anthropic 兼容后端，保存后即可应用。"
+        statusMessage = .customBackendPrompt
     }
 
     func cancelAddingCustomBackend() {
@@ -332,14 +362,14 @@ final class SwitcherViewModel: ObservableObject {
         guard !isCheckingVersion else { return }
         isCheckingVersion = true
         canUpdateClaudeCode = false
-        versionSummary = "正在检查 Claude Code 版本..."
-        versionDetail = "正在读取本机版本并查询 npm 最新版本。"
+        versionSummary = .checkingVersion
+        versionDetail = .checkingVersionDetail
 
         Task {
             let info = await versionChecker.check()
             await MainActor.run {
-                versionSummary = info.summary
-                versionDetail = info.detail
+                versionSummary = .versionSummary(info)
+                versionDetail = .versionDetail(info)
                 canUpdateClaudeCode = info.hasUpdate
                 isCheckingVersion = false
             }
@@ -350,15 +380,15 @@ final class SwitcherViewModel: ObservableObject {
         guard canUpdateClaudeCode, !isUpdatingVersion else { return }
         isUpdatingVersion = true
         canUpdateClaudeCode = false
-        versionSummary = "正在更新 Claude Code..."
-        versionDetail = "后台执行 npm update，不会打开终端窗口。"
+        versionSummary = .updatingVersion
+        versionDetail = .updatingVersionDetail
 
         Task {
             let updateResult = await versionChecker.update()
             let info = await versionChecker.check()
             await MainActor.run {
-                versionSummary = info.summary
-                versionDetail = updateResult.succeeded ? updateResult.message : updateResult.message
+                versionSummary = .versionSummary(info)
+                versionDetail = updateResult.succeeded ? .versionDetail(info) : .updateResult(updateResult)
                 canUpdateClaudeCode = info.hasUpdate
                 isUpdatingVersion = false
             }
@@ -377,10 +407,10 @@ final class SwitcherViewModel: ObservableObject {
 
         do {
             try skillManager.uninstall(selectedSkill)
-            skillStatusMessage = "已卸载 \(selectedSkill.commandName)。"
+            skillStatusMessage = .skillUninstalled(selectedSkill.commandName)
             refreshSkills()
         } catch {
-            skillStatusMessage = error.localizedDescription
+            skillStatusMessage = .raw(error.localizedDescription)
         }
     }
 
@@ -397,15 +427,15 @@ final class SwitcherViewModel: ObservableObject {
                 try skillManager.resume(selectedSkill)
                 refreshSkills()
                 selectedSkillID = selectedID
-                skillStatusMessage = "已恢复使用 \(selectedName)。"
+                skillStatusMessage = .skillResumed(selectedName)
             } else {
                 try skillManager.pause(selectedSkill)
                 refreshSkills()
                 selectedSkillID = selectedID
-                skillStatusMessage = "已暂停 \(selectedName)。恢复前 Claude Code 不会再调用它。"
+                skillStatusMessage = .skillPaused(selectedName)
             }
         } catch {
-            skillStatusMessage = error.localizedDescription
+            skillStatusMessage = .raw(error.localizedDescription)
         }
     }
 
@@ -424,12 +454,12 @@ final class SwitcherViewModel: ObservableObject {
         guard skillUpdateStates[selectedSkill.id]?.canUpdate == true else { return }
 
         isMutatingSkill = true
-        skillStatusMessage = "正在更新 \(selectedSkill.commandName)..."
+        skillStatusMessage = .skillUpdating(selectedSkill.commandName)
 
         Task {
             let result = await skillManager.update(selectedSkill)
             await MainActor.run {
-                skillStatusMessage = result.message
+                skillStatusMessage = .skillMutationResult(result)
                 isMutatingSkill = false
                 refreshSkills()
                 if result.succeeded {
@@ -449,7 +479,7 @@ final class SwitcherViewModel: ObservableObject {
             }
         } catch {
             backendProfiles = BackendProfile.builtIns
-            statusMessage = "无法读取自定义后端配置：\(error.localizedDescription)"
+            statusMessage = .customBackendLoadFailed(error.localizedDescription)
         }
     }
 
@@ -478,7 +508,7 @@ final class SwitcherViewModel: ObservableObject {
 
     private func checkSkillUpdates(_ records: [ClaudeSkillRecord]) {
         isCheckingSkillUpdates = true
-        skillStatusMessage = "正在检查 Skill 更新..."
+        skillStatusMessage = .checkingSkillUpdates
         for record in records {
             skillUpdateStates[record.id] = .checking
         }
@@ -495,28 +525,28 @@ final class SwitcherViewModel: ObservableObject {
                     skillUpdateStates[id] = state
                 }
                 let availableCount = results.values.filter(\.canUpdate).count
-                skillStatusMessage = availableCount == 0
-                    ? "Skill 更新检查完成，没有可自动更新的个人 Skill。"
-                    : "Skill 更新检查完成，\(availableCount) 个个人 Skill 可更新。"
+                skillStatusMessage = .skillUpdateCheckFinished(availableCount: availableCount)
                 isCheckingSkillUpdates = false
             }
         }
     }
 
-    private func summarizeMissingSkills(_ records: [ClaudeSkillRecord], force: Bool = false) {
+    private func generateSummaries(for records: [ClaudeSkillRecord], languageID: String, force: Bool = false) {
         guard !records.isEmpty else { return }
-        let targets = records.filter { force || skillSummaries[$0.id] == nil }
+        let targets = records.filter { force || skillSummaries[summaryKey(for: $0, languageID: languageID)] == nil }
         guard !targets.isEmpty else { return }
 
         guard selectedSummaryProfileID != Self.summaryDisabledID else {
             isSummarizingSkills = false
-            skillStatusMessage = "自动摘要已关闭；列表显示 Skill 原始描述。"
+            if force {
+                skillStatusMessage = .autoSummaryOffNeedProvider
+            }
             return
         }
 
         guard let summaryProfile = backendProfiles.first(where: { $0.id == selectedSummaryProfileID && $0.needsAPIKey }) else {
             isSummarizingSkills = false
-            skillStatusMessage = "请选择一个可用的摘要模型。"
+            skillStatusMessage = .selectSummaryProvider
             return
         }
 
@@ -526,17 +556,22 @@ final class SwitcherViewModel: ObservableObject {
 
         Task {
             var needsKey = false
+            var failureCount = 0
             for record in targets {
+                let summaryKey = summaryKey(for: record, languageID: languageID)
                 let result = await skillSummaryService.summary(
                     for: record,
                     provider: summaryProfile,
                     apiKey: summaryAPIKey,
-                    languageID: UserDefaults.standard.string(forKey: Self.languageDefaultsKey) ?? Self.defaultLanguageID
+                    languageID: languageID
                 )
                 await MainActor.run {
-                    skillSummaries[record.id] = result.text
+                    skillSummaries[summaryKey] = result.text
                     if case .needsAPIKey = result {
                         needsKey = true
+                    }
+                    if case .failed = result {
+                        failureCount += 1
                     }
                 }
                 if needsKey {
@@ -546,16 +581,46 @@ final class SwitcherViewModel: ObservableObject {
 
             await MainActor.run {
                 if needsKey {
-                    for record in targets where skillSummaries[record.id] == nil {
-                        skillSummaries[record.id] = record.description.isEmpty ? "需要先保存摘要模型 API Key。" : record.description
+                    for record in targets where skillSummaries[summaryKey(for: record, languageID: languageID)] == nil {
+                        skillSummaries[summaryKey(for: record, languageID: languageID)] = record.description.isEmpty
+                            ? AppStrings.text("需要先保存摘要模型 API Key。", languageID: languageID)
+                            : record.description
                     }
-                    skillStatusMessage = "需要先保存 \(summaryProfile.displayName) 的 API Key 才能生成中文摘要。"
+                    skillStatusMessage = .summaryNeedsKey(summaryProfile)
                 } else {
-                    skillStatusMessage = "中文 Skill 摘要已通过 \(summaryProfile.displayName) 生成或读取缓存。"
+                    skillStatusMessage = failureCount > 0
+                        ? .summaryPartiallyFailed(summaryProfile, failedCount: failureCount)
+                        : .summaryDone(summaryProfile)
                 }
                 isSummarizingSkills = false
             }
         }
+    }
+
+    private func loadCachedSkillSummaries(for records: [ClaudeSkillRecord], languageID: String) {
+        guard selectedSummaryProfileID != Self.summaryDisabledID,
+              let summaryProfile = backendProfiles.first(where: { $0.id == selectedSummaryProfileID && $0.needsAPIKey }) else {
+            return
+        }
+
+        for record in records {
+            guard let cached = skillSummaryService.cachedSummary(
+                for: record,
+                provider: summaryProfile,
+                languageID: languageID
+            ) else {
+                continue
+            }
+            skillSummaries[summaryKey(for: record, languageID: languageID)] = cached
+        }
+    }
+
+    private func summaryKey(for skill: ClaudeSkillRecord, languageID: String) -> String {
+        "\(languageID)|\(selectedSummaryProfileID)|\(skill.id)"
+    }
+
+    private var currentLanguageID: String {
+        UserDefaults.standard.string(forKey: Self.languageDefaultsKey) ?? Self.defaultLanguageID
     }
 
     private func categoryRank(_ category: String) -> String {

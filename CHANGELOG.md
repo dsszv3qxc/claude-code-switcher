@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.2
+
+- Fixed language switching for backend cards, Skill controls, status lines, and window titles.
+- Changed Skill summary provider selection so it no longer regenerates summaries automatically.
+- Added cache-first Skill summary behavior; manual generation is explicit, while newly discovered Skills can still be summarized automatically when a provider is configured.
+- Improved Skill summary failure messages with API key, HTTP status, endpoint, model, and rate-limit hints.
+
 ## 1.0.1
 
 - Added an in-app Chinese/English language switcher.

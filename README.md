@@ -88,9 +88,11 @@ Skill summaries are optional.
 On the Skill page, choose a summary model from the text-bubble menu:
 
 - Off: no summary network request is made.
-- Any configured API backend: the app uses that backend's Keychain API key and model to summarize Skill files.
+- Any configured API backend: the app uses that backend's Keychain API key and model when you generate a Skill summary.
 
-If no summary model is selected, the app shows the original Skill description.
+Choosing a summary model does not regenerate existing summaries by itself. Use the Generate/Regenerate Summary action on a Skill when you want a new summary. If the app discovers a new Skill while a summary model is already configured, it can generate a summary for that newly discovered Skill.
+
+If no summary exists, the app shows the original Skill description.
 
 ## Privacy
 
@@ -99,7 +101,7 @@ Claude Code Switcher is local-first:
 - API keys are stored in macOS Keychain.
 - Custom backend profiles are stored locally without API keys.
 - The repository does not contain your local Claude settings, Skills, build output, or screenshots.
-- Skill summary requests are sent only to the summary backend you choose.
+- Skill summary requests are sent only when you generate summaries, and only to the summary backend you choose.
 
 See [PRIVACY.md](PRIVACY.md) for details.
 

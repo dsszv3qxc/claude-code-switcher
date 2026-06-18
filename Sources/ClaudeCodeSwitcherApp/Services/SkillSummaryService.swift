@@ -15,14 +15,16 @@ struct SkillSummaryService: Sendable {
 
     func summary(for skill: ClaudeSkillRecord, provider: BackendProfile?, apiKey: String?, languageID: String) async -> SkillSummaryResult {
         guard let provider else {
-            return .ready(skill.description.isEmpty ? "未生成摘要" : skill.description)
+            return .ready(skill.description.isEmpty ? AppStrings.text("未生成摘要", languageID: languageID) : skill.description)
         }
 
         let skillText: String
         do {
             skillText = try String(contentsOf: skill.skillFile, encoding: .utf8)
         } catch {
-            return .failed("无法读取 Skill 内容，暂时不能生成中文摘要。")
+            return .failed(AppStrings.isEnglish(languageID)
+                ? "Could not read this Skill file, so a summary cannot be generated."
+                : "无法读取 Skill 内容，暂时不能生成摘要。")
         }
 
         let fingerprint = Self.fingerprint(for: "\(languageID)\n\(provider.id)\n\(skillText)")
@@ -32,7 +34,9 @@ struct SkillSummaryService: Sendable {
 
         guard let apiKey = apiKey?.trimmingCharacters(in: .whitespacesAndNewlines),
               !apiKey.isEmpty else {
-            return .needsAPIKey("需要先保存 \(provider.displayName) 的 API Key，才能生成中文摘要。")
+            return .needsAPIKey(AppStrings.isEnglish(languageID)
+                ? "Save the \(AppStrings.profileName(provider, languageID: languageID)) API key before generating summaries."
+                : "需要先保存 \(AppStrings.profileName(provider, languageID: languageID)) 的 API Key，才能生成摘要。")
         }
 
         do {
@@ -40,8 +44,17 @@ struct SkillSummaryService: Sendable {
             try saveCachedSummary(summary, fingerprint: fingerprint)
             return .ready(summary)
         } catch {
-            return .failed("中文摘要生成失败：\(error.localizedDescription)")
+            return .failed(summaryFailureMessage(error, languageID: languageID))
         }
+    }
+
+    func cachedSummary(for skill: ClaudeSkillRecord, provider: BackendProfile?, languageID: String) -> String? {
+        guard let provider,
+              let skillText = try? String(contentsOf: skill.skillFile, encoding: .utf8) else {
+            return nil
+        }
+        let fingerprint = Self.fingerprint(for: "\(languageID)\n\(provider.id)\n\(skillText)")
+        return cachedSummary(for: fingerprint)
     }
 
     private func requestSummary(skill: ClaudeSkillRecord, skillText: String, provider: BackendProfile, apiKey: String, languageID: String) async throws -> String {
@@ -101,7 +114,10 @@ struct SkillSummaryService: Sendable {
         let (data, response) = try await URLSession.shared.data(for: request)
         if let httpResponse = response as? HTTPURLResponse,
            !(200..<300).contains(httpResponse.statusCode) {
-            throw SummaryError.httpStatus(httpResponse.statusCode)
+            let body = String(data: data, encoding: .utf8)?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .prefix(260)
+            throw SummaryError.httpStatus(httpResponse.statusCode, body.map(String.init))
         }
 
         let decoded = try JSONDecoder().decode(AnthropicSummaryResponse.self, from: data)
@@ -200,18 +216,71 @@ private struct AnthropicContent: Decodable {
 }
 
 private enum SummaryError: LocalizedError {
-    case httpStatus(Int)
+    case httpStatus(Int, String?)
     case emptyResponse
     case invalidProvider
 
     var errorDescription: String? {
         switch self {
-        case .httpStatus(let status):
-            "摘要模型返回 HTTP \(status)"
+        case .httpStatus(let status, let body):
+            if let body, !body.isEmpty {
+                "摘要模型返回 HTTP \(status)：\(body)"
+            } else {
+                "摘要模型返回 HTTP \(status)"
+            }
         case .emptyResponse:
             "摘要模型没有返回摘要内容"
         case .invalidProvider:
             "摘要模型配置不完整"
         }
     }
+}
+
+private func summaryFailureMessage(_ error: Error, languageID: String) -> String {
+    let detail = error.localizedDescription
+    let prefix = AppStrings.isEnglish(languageID) ? "Summary generation failed" : "摘要生成失败"
+
+    if let summaryError = error as? SummaryError {
+        switch summaryError {
+        case .httpStatus(let status, let body):
+            let hint: String
+            if AppStrings.isEnglish(languageID) {
+                switch status {
+                case 400:
+                    hint = "Check whether the model name and Anthropic-compatible request format are accepted by this provider."
+                case 401, 403:
+                    hint = "Check whether the API key is valid and saved for this backend."
+                case 404:
+                    hint = "Check whether the Base URL ends at the provider's Anthropic-compatible endpoint."
+                case 429:
+                    hint = "The provider may be rate-limiting this key. Try again later."
+                default:
+                    hint = "The provider rejected the request."
+                }
+                let bodyText = body.map { " Response: \($0)" } ?? ""
+                return "\(prefix): HTTP \(status). \(hint)\(bodyText)"
+            }
+
+            switch status {
+            case 400:
+                hint = "请检查模型名，以及这个服务是否真的兼容 Anthropic Messages 格式。"
+            case 401, 403:
+                hint = "请检查这个后端的 API Key 是否正确保存。"
+            case 404:
+                hint = "请检查 Base URL 是否指向服务商的 Anthropic 兼容接口。"
+            case 429:
+                hint = "服务商可能正在限流，稍后再试。"
+            default:
+                hint = "服务商拒绝了这次请求。"
+            }
+            let bodyText = body.map { " 返回内容：\($0)" } ?? ""
+            return "\(prefix)：HTTP \(status)。\(hint)\(bodyText)"
+        case .emptyResponse, .invalidProvider:
+            break
+        }
+    }
+
+    return AppStrings.isEnglish(languageID)
+        ? "\(prefix): \(detail)"
+        : "\(prefix)：\(detail)"
 }

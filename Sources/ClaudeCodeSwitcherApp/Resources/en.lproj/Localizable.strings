@@ -68,7 +68,8 @@
 "自动摘要已关闭；列表显示 Skill 原始描述。" = "Auto summaries are off; the list shows original Skill descriptions.";
 "自动摘要已关闭。请选择一个摘要模型后再重写摘要。" = "Auto summaries are off. Select a summary model before rewriting.";
 "请选择一个可用的摘要模型。" = "Select an available summary model.";
-"正在生成中文摘要..." = "Generating summary...";
+"正在生成摘要..." = "Generating summary...";
+"正在重新生成摘要..." = "Regenerating summary...";
 "未生成摘要" = "No summary generated";
 
 "Claude 个人" = "Claude Personal";
@@ -113,6 +114,7 @@
 "暂停使用" = "Pause";
 "恢复使用" = "Resume";
 "检查更新" = "Check Update";
+"生成摘要" = "Generate Summary";
 "重写摘要" = "Rewrite Summary";
 "更新" = "Update";
 "更多" = "More";

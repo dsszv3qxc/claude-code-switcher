@@ -7,7 +7,7 @@ struct ClaudeCodeSwitcherApp: App {
 
     var body: some Scene {
         WindowGroup(windowTitle) {
-            ContentView(viewModel: viewModel)
+            ContentView(viewModel: viewModel, languageID: $languageID)
                 .frame(width: 900)
                 .frame(height: 760)
         }

@@ -3,8 +3,8 @@ import ClaudeCodeSwitcherCore
 
 struct ContentView: View {
     @ObservedObject var viewModel: SwitcherViewModel
+    @Binding var languageID: String
     @State private var showingUninstallConfirmation = false
-    @AppStorage(SwitcherViewModel.languageDefaultsKey) private var languageID = SwitcherViewModel.defaultLanguageID
 
     var body: some View {
         VStack(alignment: .leading, spacing: 22) {
@@ -17,17 +17,18 @@ struct ContentView: View {
         .padding(.top, 30)
         .padding(.bottom, 28)
         .background(Color(nsColor: .windowBackgroundColor))
+        .background(WindowTitleUpdater(title: windowTitle))
         .environment(\.locale, Locale(identifier: languageID))
         .onChange(of: languageID) { _, _ in
-            viewModel.languageDidChange()
+            viewModel.languageDidChange(to: languageID)
         }
         .animation(.easeInOut(duration: 0.18), value: viewModel.selectedProfileID)
         .animation(.easeInOut(duration: 0.18), value: viewModel.isAddingCustomBackend)
-        .confirmationDialog("确认卸载这个个人 Skill？", isPresented: $showingUninstallConfirmation) {
-            Button("卸载", role: .destructive) {
+        .confirmationDialog(t("确认卸载这个个人 Skill？"), isPresented: $showingUninstallConfirmation) {
+            Button(t("卸载"), role: .destructive) {
                 viewModel.uninstallSelectedSkill()
             }
-            Button("取消", role: .cancel) { }
+            Button(t("取消"), role: .cancel) { }
         }
     }
 
@@ -76,9 +77,9 @@ struct ContentView: View {
             .shadow(color: .black.opacity(0.14), radius: 12, y: 5)
 
             VStack(alignment: .leading, spacing: 5) {
-                Text("后端与 Skill 中枢")
+                Text(t("后端与 Skill 中枢"))
                     .font(.system(size: 22, weight: .semibold, design: .rounded))
-                Text("Claude Code 的模型路由、版本更新与技能目录")
+                Text(t("Claude Code 的模型路由、版本更新与技能目录"))
                     .font(.callout.weight(.medium))
                     .foregroundStyle(.secondary)
             }
@@ -87,7 +88,7 @@ struct ContentView: View {
 
             Picker("", selection: $viewModel.selectedSection) {
                 ForEach(AppSection.allCases) { section in
-                    Text(LocalizedStringKey(section.displayName)).tag(section)
+                    Text(t(section.displayName)).tag(section)
                 }
             }
             .pickerStyle(.segmented)
@@ -116,17 +117,17 @@ struct ContentView: View {
             StatusDot(color: viewModel.currentProfile.accentColor)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text("当前生效")
+                Text(t("当前生效"))
                     .font(.caption.weight(.medium))
                     .foregroundStyle(.secondary)
-                Text(LocalizedStringKey(viewModel.currentProfile.displayName))
+                Text(AppStrings.profileName(viewModel.currentProfile, languageID: languageID))
                     .font(.title3.weight(.semibold))
             }
 
             Spacer()
 
             if !viewModel.isCurrentSelection || viewModel.isAddingCustomBackend {
-                Text("尚未应用")
+                Text(t("尚未应用"))
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.white)
                     .padding(.horizontal, 10)
@@ -151,7 +152,7 @@ struct ContentView: View {
 
     private var modeGrid: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("选择模式")
+            Text(t("选择模式"))
                 .font(.headline)
 
             LazyVGrid(columns: modeColumns, alignment: .leading, spacing: 14) {
@@ -159,13 +160,14 @@ struct ContentView: View {
                     ModeCard(
                         profile: profile,
                         isSelected: viewModel.selectedProfileID == profile.id && !viewModel.isAddingCustomBackend,
-                        isCurrent: viewModel.currentProfile.id == profile.id
+                        isCurrent: viewModel.currentProfile.id == profile.id,
+                        languageID: languageID
                     ) {
                         viewModel.selectProfile(profile)
                     }
                 }
 
-                AddCustomBackendCard(isSelected: viewModel.isAddingCustomBackend) {
+                AddCustomBackendCard(isSelected: viewModel.isAddingCustomBackend, languageID: languageID) {
                     viewModel.beginAddingCustomBackend()
                 }
             }
@@ -202,24 +204,17 @@ struct ContentView: View {
     private var keySection: some View {
         VStack(alignment: .leading, spacing: 13) {
             HStack {
-                Label {
-                    HStack(spacing: 0) {
-                        Text(LocalizedStringKey(viewModel.selectedProfile.displayName))
-                        Text(" API Key")
-                    }
+                Label(AppStrings.apiKeyTitle(viewModel.selectedProfile, languageID: languageID), systemImage: "key.fill")
                     .font(.headline)
-                } icon: {
-                    Image(systemName: "key.fill")
-                }
                 Spacer()
                 Button {
                     viewModel.loadSavedKey()
                 } label: {
-                    Label("读取密钥", systemImage: "key.viewfinder")
+                    Label(t("读取密钥"), systemImage: "key.viewfinder")
                 }
                 .buttonStyle(.borderless)
 
-                Text("钥匙串")
+                Text(t("钥匙串"))
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 8)
@@ -230,7 +225,7 @@ struct ContentView: View {
             SecureField("sk-...", text: $viewModel.apiKey)
                 .textFieldStyle(.roundedBorder)
 
-            Text("密钥只保存到本机钥匙串，不会写入项目文件或 GitHub 仓库。")
+            Text(t("密钥只保存到本机钥匙串，不会写入项目文件或 GitHub 仓库。"))
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -249,10 +244,10 @@ struct ContentView: View {
     private var customBackendSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Label("新增自定义后端", systemImage: "slider.horizontal.3")
+                Label(t("新增自定义后端"), systemImage: "slider.horizontal.3")
                     .font(.headline)
                 Spacer()
-                Text("Anthropic 兼容")
+                Text(t("Anthropic 兼容"))
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.teal)
                     .padding(.horizontal, 8)
@@ -261,14 +256,14 @@ struct ContentView: View {
             }
 
             HStack(spacing: 10) {
-                TextField("显示名称，例如 OpenRouter Claude", text: $viewModel.customBackendDraft.displayName)
-                TextField("Base URL，例如 https://api.example.com/anthropic", text: $viewModel.customBackendDraft.baseURL)
+                TextField(t("显示名称，例如 OpenRouter Claude"), text: $viewModel.customBackendDraft.displayName)
+                TextField(t("Base URL，例如 https://api.example.com/anthropic"), text: $viewModel.customBackendDraft.baseURL)
             }
             .textFieldStyle(.roundedBorder)
 
             HStack(spacing: 10) {
-                TextField("主模型，例如 claude-sonnet-4-20250514", text: $viewModel.customBackendDraft.primaryModel)
-                TextField("快速模型，可和主模型相同", text: $viewModel.customBackendDraft.fastModel)
+                TextField(t("主模型，例如 claude-sonnet-4-20250514"), text: $viewModel.customBackendDraft.primaryModel)
+                TextField(t("快速模型，可和主模型相同"), text: $viewModel.customBackendDraft.fastModel)
             }
             .textFieldStyle(.roundedBorder)
 
@@ -276,11 +271,11 @@ struct ContentView: View {
                 .textFieldStyle(.roundedBorder)
 
             HStack {
-                Text("第一版只支持 Anthropic 兼容接口，不做 OpenAI/Gemini 协议转换。")
+                Text(t("第一版只支持 Anthropic 兼容接口，不做 OpenAI/Gemini 协议转换。"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Spacer()
-                Button("取消") {
+                Button(t("取消")) {
                     viewModel.cancelAddingCustomBackend()
                 }
             }
@@ -306,9 +301,9 @@ struct ContentView: View {
                 .background(Color.blue.opacity(0.10), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
 
             VStack(alignment: .leading, spacing: 5) {
-                Text("Claude 订阅无需 API Key")
+                Text(t("Claude 订阅无需 API Key"))
                     .font(.headline)
-                Text("切回 Claude 时会移除 DeepSeek 路由配置，后续 `claude` 使用你的登录订阅。")
+                Text(t("切回 Claude 时会移除 DeepSeek 路由配置，后续 `claude` 使用你的登录订阅。"))
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
@@ -337,21 +332,21 @@ struct ContentView: View {
                 Button {
                     viewModel.refresh()
                 } label: {
-                    Label("刷新", systemImage: "arrow.clockwise")
+                    Label(t("刷新"), systemImage: "arrow.clockwise")
                 }
 
                 if viewModel.selectedProfile.needsAPIKey && !viewModel.isAddingCustomBackend {
                     Button {
                         viewModel.saveKey()
                     } label: {
-                        Label("保存密钥", systemImage: "key")
+                        Label(t("保存密钥"), systemImage: "key")
                     }
                 }
 
                 Button {
                     viewModel.checkClaudeVersion()
                 } label: {
-                    Label("检查版本", systemImage: "arrow.down.circle")
+                    Label(t("检查版本"), systemImage: "arrow.down.circle")
                 }
                 .disabled(viewModel.isCheckingVersion || viewModel.isUpdatingVersion)
 
@@ -359,7 +354,7 @@ struct ContentView: View {
                     Button {
                         viewModel.updateClaudeCodeVersion()
                     } label: {
-                        Label(viewModel.isUpdatingVersion ? "更新中" : "更新 Claude Code", systemImage: "square.and.arrow.down")
+                        Label(t(viewModel.isUpdatingVersion ? "更新中" : "更新 Claude Code"), systemImage: "square.and.arrow.down")
                     }
                     .disabled(viewModel.isUpdatingVersion || viewModel.isCheckingVersion)
                 }
@@ -369,7 +364,7 @@ struct ContentView: View {
                 Button {
                     viewModel.applySelectedMode()
                 } label: {
-                    Label(viewModel.isAddingCustomBackend ? "保存并应用" : (viewModel.isCurrentSelection ? "重新应用" : "应用模式"), systemImage: "checkmark.circle")
+                    Label(t(viewModel.isAddingCustomBackend ? "保存并应用" : (viewModel.isCurrentSelection ? "重新应用" : "应用模式")), systemImage: "checkmark.circle")
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(viewModel.isBusy)
@@ -387,10 +382,10 @@ struct ContentView: View {
                 .frame(width: 16)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(LocalizedStringKey(viewModel.versionSummary))
+                Text(viewModel.versionSummaryText(languageID: languageID))
                     .font(.callout.weight(.medium))
                     .foregroundStyle(.primary)
-                Text(LocalizedStringKey(viewModel.versionDetail))
+                Text(viewModel.versionDetailText(languageID: languageID))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
@@ -415,7 +410,7 @@ struct ContentView: View {
         HStack(spacing: 8) {
             Image(systemName: statusIcon)
                 .foregroundStyle(statusColor)
-            Text(LocalizedStringKey(viewModel.statusMessage.isEmpty ? "当前模式：\(viewModel.currentProfile.displayName)" : viewModel.statusMessage))
+            Text(viewModel.statusText(languageID: languageID))
                 .lineLimit(2)
                 .font(.callout.weight(.medium))
                 .foregroundStyle(.secondary)
@@ -432,20 +427,20 @@ struct ContentView: View {
         viewModel.currentProfile.accentColor
     }
 
-    private var isEnglishUI: Bool {
-        languageID.hasPrefix("en")
-    }
-
     private var skillCountText: String {
-        let count = "\(viewModel.filteredSkillCount) / \(viewModel.skills.count)"
-        return isEnglishUI ? count : "\(count) 个"
+        AppStrings.skillCount(filtered: viewModel.filteredSkillCount, total: viewModel.skills.count, languageID: languageID)
     }
 
     private var summaryProviderHelpText: String {
-        if isEnglishUI {
-            return "Summary model: \(viewModel.summaryProviderName)"
-        }
-        return "摘要模型：\(viewModel.summaryProviderName)"
+        AppStrings.summaryProviderHelp(viewModel.summaryProviderName(languageID: languageID), languageID: languageID)
+    }
+
+    private func t(_ key: String) -> String {
+        AppStrings.text(key, languageID: languageID)
+    }
+
+    private var windowTitle: String {
+        AppStrings.isEnglish(languageID) ? "Claude Code Switcher" : "Claude Code 切换器"
     }
 
     private var skillsContent: some View {
@@ -464,7 +459,7 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 8) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("技能库")
+                    Text(t("技能库"))
                         .font(.subheadline.weight(.semibold))
                     Text(skillCountText)
                         .font(.caption2.weight(.medium))
@@ -474,10 +469,10 @@ struct ContentView: View {
                 Spacer()
 
                 Menu {
-                    Picker("摘要模型", selection: $viewModel.selectedSummaryProfileID) {
-                        Text("关闭自动摘要").tag(SwitcherViewModel.summaryDisabledID)
+                    Picker(t("摘要模型"), selection: $viewModel.selectedSummaryProfileID) {
+                        Text(t("关闭自动摘要")).tag(SwitcherViewModel.summaryDisabledID)
                         ForEach(viewModel.selectableSummaryProfiles) { profile in
-                            Text(LocalizedStringKey(profile.displayName)).tag(profile.id)
+                            Text(AppStrings.profileName(profile, languageID: languageID)).tag(profile.id)
                         }
                     }
                 } label: {
@@ -488,14 +483,14 @@ struct ContentView: View {
                 .menuStyle(.borderlessButton)
 
                 Menu {
-                    Picker("分类", selection: $viewModel.selectedSkillCategory) {
+                    Picker(t("分类"), selection: $viewModel.selectedSkillCategory) {
                         ForEach(viewModel.skillCategories, id: \.self) { category in
-                            Text(LocalizedStringKey(category)).tag(category)
+                            Text(t(category)).tag(category)
                         }
                     }
                 } label: {
                     HStack(spacing: 4) {
-                        Text(LocalizedStringKey(viewModel.selectedSkillCategory))
+                        Text(t(viewModel.selectedSkillCategory))
                             .lineLimit(1)
                             .truncationMode(.tail)
                         Image(systemName: "chevron.down")
@@ -511,14 +506,14 @@ struct ContentView: View {
                     Button {
                         viewModel.refreshSkills()
                     } label: {
-                        Label("刷新技能库", systemImage: "arrow.clockwise")
+                        Label(t("刷新技能库"), systemImage: "arrow.clockwise")
                     }
                     .disabled(viewModel.isRefreshingSkills || viewModel.isCheckingSkillUpdates)
 
                     Button {
                         viewModel.checkAllSkillUpdates()
                     } label: {
-                        Label("检查当前分类更新", systemImage: "arrow.down.circle")
+                        Label(t("检查当前分类更新"), systemImage: "arrow.down.circle")
                     }
                     .disabled(viewModel.skills.isEmpty || viewModel.isCheckingSkillUpdates)
                 } label: {
@@ -537,7 +532,7 @@ struct ContentView: View {
                     Image(systemName: "tray")
                         .font(.system(size: 26))
                         .foregroundStyle(.secondary)
-                    Text("没有扫描到 Skill")
+                    Text(t("没有扫描到 Skill"))
                         .font(.callout.weight(.medium))
                         .foregroundStyle(.secondary)
                 }
@@ -547,7 +542,7 @@ struct ContentView: View {
                     Image(systemName: "line.3.horizontal.decrease.circle")
                         .font(.system(size: 26))
                         .foregroundStyle(.secondary)
-                    Text("这个分类下没有 Skill")
+                    Text(t("这个分类下没有 Skill"))
                         .font(.callout.weight(.medium))
                         .foregroundStyle(.secondary)
                 }
@@ -558,7 +553,7 @@ struct ContentView: View {
                         ForEach(viewModel.groupedSkills, id: \.category) { group in
                             VStack(alignment: .leading, spacing: 7) {
                                 HStack {
-                                    Text(LocalizedStringKey(group.category))
+                                    Text(t(group.category))
                                         .font(.caption2.weight(.bold))
                                         .foregroundStyle(.secondary)
                                     Spacer()
@@ -575,9 +570,10 @@ struct ContentView: View {
                                         } label: {
                                             SkillRow(
                                                 skill: skill,
-                                                summary: viewModel.summaryText(for: skill),
+                                                summary: viewModel.summaryText(for: skill, languageID: languageID),
                                                 updateState: viewModel.skillUpdateStates[skill.id] ?? .notChecked,
-                                                isSelected: viewModel.selectedSkillID == skill.id
+                                                isSelected: viewModel.selectedSkillID == skill.id,
+                                                languageID: languageID
                                             )
                                         }
                                         .buttonStyle(.plain)
@@ -607,15 +603,19 @@ struct ContentView: View {
             if let skill = viewModel.selectedSkill {
                 SkillDetailView(
                     skill: skill,
-                    summary: viewModel.summaryText(for: skill),
+                    summary: viewModel.summaryText(for: skill, languageID: languageID),
                     usageText: viewModel.usageText(for: skill, languageID: languageID),
                     updateState: viewModel.skillUpdateStates[skill.id] ?? .notChecked,
                     isBusy: viewModel.isCheckingSkillUpdates || viewModel.isMutatingSkill,
+                    languageID: languageID,
+                    hasSummary: viewModel.hasGeneratedSummary(for: skill, languageID: languageID),
                     reveal: viewModel.revealSelectedSkill,
                     togglePaused: viewModel.toggleSelectedSkillPaused,
                     checkUpdate: viewModel.checkSelectedSkillUpdate,
                     update: viewModel.updateSelectedSkill,
-                    regenerateSummary: viewModel.regenerateSelectedSkillSummary,
+                    regenerateSummary: {
+                        viewModel.regenerateSelectedSkillSummary(languageID: languageID)
+                    },
                     requestUninstall: {
                         showingUninstallConfirmation = true
                     }
@@ -625,7 +625,7 @@ struct ContentView: View {
                     Image(systemName: "cursorarrow.click")
                         .font(.system(size: 26))
                         .foregroundStyle(.secondary)
-                    Text("选择一个 Skill")
+                    Text(t("选择一个 Skill"))
                         .font(.callout.weight(.medium))
                         .foregroundStyle(.secondary)
                 }
@@ -646,7 +646,7 @@ struct ContentView: View {
         HStack(spacing: 8) {
             Image(systemName: "wand.and.stars")
                 .foregroundStyle(.teal)
-            Text(LocalizedStringKey(viewModel.skillStatusMessage))
+            Text(viewModel.skillStatusText(languageID: languageID))
                 .lineLimit(2)
                 .font(.callout.weight(.medium))
                 .foregroundStyle(.secondary)
@@ -660,6 +660,7 @@ private struct SkillRow: View {
     let summary: String
     let updateState: SkillUpdateState
     let isSelected: Bool
+    let languageID: String
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
@@ -688,13 +689,13 @@ private struct SkillRow: View {
                     .fixedSize(horizontal: false, vertical: true)
 
                 HStack(spacing: 7) {
-                    Text(LocalizedStringKey(skill.scope.displayName))
+                    Text(AppStrings.text(skill.scope.displayName, languageID: languageID))
                         .font(.caption2.weight(.medium))
                         .foregroundStyle(scopeColor)
                     Text("·")
                         .font(.caption2)
                         .foregroundStyle(.tertiary)
-                    Text(LocalizedStringKey(skill.isPaused ? "已暂停" : updateState.label))
+                    Text(AppStrings.text(skill.isPaused ? "已暂停" : updateState.label, languageID: languageID))
                         .font(.caption2.weight(.medium))
                         .foregroundStyle(skill.isPaused ? .orange : .secondary)
                 }
@@ -739,13 +740,13 @@ private struct SkillRow: View {
 }
 
 private struct SkillDetailView: View {
-    @Environment(\.locale) private var locale
-
     let skill: ClaudeSkillRecord
     let summary: String
     let usageText: String
     let updateState: SkillUpdateState
     let isBusy: Bool
+    let languageID: String
+    let hasSummary: Bool
     let reveal: () -> Void
     let togglePaused: () -> Void
     let checkUpdate: () -> Void
@@ -784,23 +785,23 @@ private struct SkillDetailView: View {
                     Divider()
 
                     LazyVGrid(columns: detailColumns, alignment: .leading, spacing: 13) {
-                        DetailField(title: "分类", value: skill.category, icon: "tag")
-                        DetailField(title: "状态", value: skill.isPaused ? "已暂停" : "启用中", icon: skill.isPaused ? "pause.circle" : "checkmark.circle")
-                        DetailField(title: "来源", value: skill.scope.displayName, icon: scopeIcon)
-                        DetailField(title: "版本", value: skill.pluginVersion ?? "不适用", icon: "number")
-                        DetailField(title: "支持文件", value: supportingFileText, icon: "doc")
-                        DetailField(title: "名称", value: skill.name, icon: "textformat")
-                        DetailField(title: "插件", value: pluginText, icon: "shippingbox")
+                        DetailField(title: "分类", value: skill.category, icon: "tag", languageID: languageID)
+                        DetailField(title: "状态", value: skill.isPaused ? "已暂停" : "启用中", icon: skill.isPaused ? "pause.circle" : "checkmark.circle", languageID: languageID)
+                        DetailField(title: "来源", value: skill.scope.displayName, icon: scopeIcon, languageID: languageID)
+                        DetailField(title: "版本", value: skill.pluginVersion ?? "不适用", icon: "number", languageID: languageID)
+                        DetailField(title: "支持文件", value: supportingFileText, icon: "doc", languageID: languageID)
+                        DetailField(title: "名称", value: skill.name, icon: "textformat", languageID: languageID)
+                        DetailField(title: "插件", value: pluginText, icon: "shippingbox", languageID: languageID)
                     }
 
                     Divider()
 
                     VStack(alignment: .leading, spacing: 14) {
-                        DetailTextBlock(title: "如何使用", value: usageText)
-                        DetailTextBlock(title: "原始描述", value: skill.description.isEmpty ? "没有描述" : skill.description)
-                        DetailTextBlock(title: "工具权限", value: toolsText)
-                        DetailTextBlock(title: "路径", value: skill.skillDirectory.path, isMonospaced: true)
-                        DetailField(title: "修改时间", value: modifiedText, icon: "calendar")
+                        DetailTextBlock(title: "如何使用", value: usageText, languageID: languageID)
+                        DetailTextBlock(title: "原始描述", value: skill.description.isEmpty ? "没有描述" : skill.description, languageID: languageID)
+                        DetailTextBlock(title: "工具权限", value: toolsText, languageID: languageID)
+                        DetailTextBlock(title: "路径", value: skill.skillDirectory.path, isMonospaced: true, languageID: languageID)
+                        DetailField(title: "修改时间", value: modifiedText, icon: "calendar", languageID: languageID)
                     }
 
                     Divider()
@@ -810,9 +811,9 @@ private struct SkillDetailView: View {
                             .foregroundStyle(updateColor)
                             .frame(width: 18)
                         VStack(alignment: .leading, spacing: 3) {
-                            Text(LocalizedStringKey(updateState.label))
+                            Text(AppStrings.text(updateState.label, languageID: languageID))
                                 .font(.callout.weight(.medium))
-                            Text(LocalizedStringKey(updateState.detail))
+                            Text(AppStrings.text(updateState.detail, languageID: languageID))
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                                 .textSelection(.enabled)
@@ -832,7 +833,7 @@ private struct SkillDetailView: View {
                 Button {
                     reveal()
                 } label: {
-                    Label("显示文件", systemImage: "folder")
+                    Label(AppStrings.text("显示文件", languageID: languageID), systemImage: "folder")
                         .frame(minWidth: 92)
                 }
 
@@ -840,7 +841,7 @@ private struct SkillDetailView: View {
                     togglePaused()
                 } label: {
                     Label {
-                        Text(LocalizedStringKey(skill.isPaused ? "恢复使用" : "暂停使用"))
+                        Text(AppStrings.text(skill.isPaused ? "恢复使用" : "暂停使用", languageID: languageID))
                             .frame(minWidth: 96)
                     } icon: {
                         Image(systemName: skill.isPaused ? "play.circle" : "pause.circle")
@@ -854,14 +855,14 @@ private struct SkillDetailView: View {
                     Button {
                         checkUpdate()
                     } label: {
-                        Label("检查更新", systemImage: "arrow.down.circle")
+                        Label(AppStrings.text("检查更新", languageID: languageID), systemImage: "arrow.down.circle")
                     }
                     .disabled(isBusy)
 
                     Button {
                         regenerateSummary()
                     } label: {
-                        Label("重写摘要", systemImage: "text.bubble")
+                        Label(AppStrings.text(hasSummary ? "重写摘要" : "生成摘要", languageID: languageID), systemImage: "text.bubble")
                     }
                     .disabled(isBusy)
 
@@ -870,18 +871,18 @@ private struct SkillDetailView: View {
                     Button {
                         update()
                     } label: {
-                        Label("更新", systemImage: "square.and.arrow.down")
+                        Label(AppStrings.text("更新", languageID: languageID), systemImage: "square.and.arrow.down")
                     }
                     .disabled(isBusy || !updateState.canUpdate)
 
                     Button(role: .destructive) {
                         requestUninstall()
                     } label: {
-                        Label("卸载", systemImage: "trash")
+                        Label(AppStrings.text("卸载", languageID: languageID), systemImage: "trash")
                     }
                     .disabled(isBusy || !skill.isUninstallable)
                 } label: {
-                    Label("更多", systemImage: "ellipsis.circle")
+                    Label(AppStrings.text("更多", languageID: languageID), systemImage: "ellipsis.circle")
                         .frame(minWidth: 74)
                 }
             }
@@ -932,7 +933,7 @@ private struct SkillDetailView: View {
     }
 
     private var supportingFileText: String {
-        locale.identifier.hasPrefix("en") ? "\(skill.supportingFileCount)" : "\(skill.supportingFileCount) 个"
+        AppStrings.supportingFileCount(skill.supportingFileCount, languageID: languageID)
     }
 
     private var modifiedText: String {
@@ -945,15 +946,15 @@ private struct SkillDetailView: View {
     private var toolsText: String {
         var parts: [String] = []
         if let allowedTools = skill.allowedTools, !allowedTools.isEmpty {
-            parts.append("允许：\(allowedTools)")
+            parts.append("\(AppStrings.text("允许", languageID: languageID))：\(allowedTools)")
         }
         if let disallowedTools = skill.disallowedTools, !disallowedTools.isEmpty {
-            parts.append("禁止：\(disallowedTools)")
+            parts.append("\(AppStrings.text("禁止", languageID: languageID))：\(disallowedTools)")
         }
         if skill.disableModelInvocation {
-            parts.append("禁用模型调用")
+            parts.append(AppStrings.text("禁用模型调用", languageID: languageID))
         }
-        return parts.isEmpty ? "未声明" : parts.joined(separator: "；")
+        return parts.isEmpty ? AppStrings.text("未声明", languageID: languageID) : parts.joined(separator: AppStrings.isEnglish(languageID) ? "; " : "；")
     }
 
     private var updateIcon: String {
@@ -995,6 +996,7 @@ private struct DetailField: View {
     let title: String
     let value: String
     let icon: String
+    let languageID: String
 
     var body: some View {
         HStack(alignment: .top, spacing: 9) {
@@ -1004,10 +1006,10 @@ private struct DetailField: View {
                 .frame(width: 18, height: 18)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(LocalizedStringKey(title))
+                Text(AppStrings.text(title, languageID: languageID))
                     .font(.caption2.weight(.medium))
                     .foregroundStyle(.secondary)
-                Text(LocalizedStringKey(value))
+                Text(AppStrings.text(value, languageID: languageID))
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.primary)
                     .lineLimit(2)
@@ -1025,10 +1027,11 @@ private struct DetailTextBlock: View {
     let title: String
     let value: String
     var isMonospaced = false
+    let languageID: String
 
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
-            Text(LocalizedStringKey(title))
+            Text(AppStrings.text(title, languageID: languageID))
                 .font(.caption2.weight(.bold))
                 .foregroundStyle(.secondary)
             Text(value)
@@ -1046,6 +1049,7 @@ private struct ModeCard: View {
     let profile: BackendProfile
     let isSelected: Bool
     let isCurrent: Bool
+    let languageID: String
     let action: () -> Void
 
     var body: some View {
@@ -1061,7 +1065,7 @@ private struct ModeCard: View {
                     Spacer()
 
                     if isCurrent {
-                    Text("当前")
+                    Text(AppStrings.text("当前", languageID: languageID))
                             .font(.caption2.weight(.bold))
                             .foregroundStyle(profile.accentColor)
                             .padding(.horizontal, 7)
@@ -1071,13 +1075,13 @@ private struct ModeCard: View {
                 }
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(LocalizedStringKey(profile.displayName))
+                    Text(AppStrings.profileName(profile, languageID: languageID))
                         .font(.system(size: 15, weight: .semibold, design: .rounded))
                         .foregroundStyle(.primary)
                         .lineLimit(1)
                         .minimumScaleFactor(0.85)
 
-                    Text(LocalizedStringKey(profile.shortDescription))
+                    Text(AppStrings.text(profile.shortDescription, languageID: languageID))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
@@ -1097,12 +1101,13 @@ private struct ModeCard: View {
             .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(profile.displayName)
+        .accessibilityLabel(AppStrings.profileName(profile, languageID: languageID))
     }
 }
 
 private struct AddCustomBackendCard: View {
     let isSelected: Bool
+    let languageID: String
     let action: () -> Void
 
     var body: some View {
@@ -1115,10 +1120,10 @@ private struct AddCustomBackendCard: View {
                     .background(Color.teal.opacity(isSelected ? 0.14 : 0.08), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("自定义后端")
+                    Text(AppStrings.text("自定义后端", languageID: languageID))
                         .font(.system(size: 15, weight: .semibold, design: .rounded))
                         .foregroundStyle(.primary)
-                    Text("填写兼容地址和模型名")
+                    Text(AppStrings.text("填写兼容地址和模型名", languageID: languageID))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
@@ -1137,7 +1142,7 @@ private struct AddCustomBackendCard: View {
             .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("新增自定义后端")
+        .accessibilityLabel(AppStrings.text("新增自定义后端", languageID: languageID))
     }
 }
 
@@ -1152,6 +1157,21 @@ private struct StatusDot: View {
             Circle()
                 .fill(color)
                 .frame(width: 10, height: 10)
+        }
+    }
+}
+
+private struct WindowTitleUpdater: NSViewRepresentable {
+    let title: String
+
+    func makeNSView(context: Context) -> NSView {
+        NSView()
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        DispatchQueue.main.async {
+            nsView.window?.title = title
+            NSApplication.shared.mainMenu?.items.first?.title = title
         }
     }
 }

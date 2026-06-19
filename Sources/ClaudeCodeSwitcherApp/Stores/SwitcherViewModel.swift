@@ -269,6 +269,11 @@ final class SwitcherViewModel: ObservableObject {
         generateSummaries(for: [selectedSkill], languageID: languageID, force: true)
     }
 
+    func generateFilteredSkillSummaries(languageID: String) {
+        guard !filteredSkills.isEmpty, !isSummarizingSkills else { return }
+        generateSummaries(for: filteredSkills, languageID: languageID, showNoopMessage: true)
+    }
+
     func loadSavedKey() {
         do {
             guard selectedProfile.needsAPIKey else {
@@ -561,14 +566,24 @@ final class SwitcherViewModel: ObservableObject {
         }
     }
 
-    private func generateSummaries(for records: [ClaudeSkillRecord], languageID: String, force: Bool = false) {
+    private func generateSummaries(
+        for records: [ClaudeSkillRecord],
+        languageID: String,
+        force: Bool = false,
+        showNoopMessage: Bool = false
+    ) {
         guard !records.isEmpty else { return }
         let providerID = selectedSummaryProfileID
         let targets = records.filter { record in
             let key = summaryKey(for: record, providerID: providerID, languageID: languageID)
             return force || (!generatedSummaryKeys.contains(key) && skillSummaries[key] == nil)
         }
-        guard !targets.isEmpty else { return }
+        guard !targets.isEmpty else {
+            if showNoopMessage {
+                skillStatusMessage = .summaryAlreadyGenerated
+            }
+            return
+        }
 
         guard providerID != Self.summaryDisabledID else {
             isSummarizingSkills = false
@@ -585,6 +600,7 @@ final class SwitcherViewModel: ObservableObject {
         }
 
         isSummarizingSkills = true
+        skillStatusMessage = .generatingSummaries(profile: summaryProfile, count: targets.count)
         let keyFromField = summaryProfile.id == selectedProfile.id ? apiKey.trimmingCharacters(in: .whitespacesAndNewlines) : ""
         let summaryAPIKey = !keyFromField.isEmpty ? keyFromField : (try? keychainStore.readAPIKey(for: summaryProfile))
 

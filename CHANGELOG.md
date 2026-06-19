@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.4
+
+- Added batch Skill summary generation from the Skill library menu.
+- Batch generation respects the current category filter and skips Skills that already have generated summaries.
+
 ## 1.0.3
 
 - Fixed Claude Code version checks from the macOS app by adding common CLI install paths such as `~/.local/bin` and Homebrew paths.

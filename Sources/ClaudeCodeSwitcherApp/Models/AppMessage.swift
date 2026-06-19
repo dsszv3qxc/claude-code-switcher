@@ -34,6 +34,8 @@ enum AppMessage: Equatable, Sendable {
     case autoSummaryOffNeedProvider
     case selectSummaryProvider
     case summaryNeedsKey(BackendProfile)
+    case generatingSummaries(profile: BackendProfile, count: Int)
+    case summaryAlreadyGenerated
     case summaryDone(BackendProfile)
     case summaryPartiallyFailed(BackendProfile, failedCount: Int)
     case checkingSkillUpdates
@@ -140,6 +142,14 @@ enum AppMessage: Equatable, Sendable {
             return AppStrings.isEnglish(languageID)
                 ? "Save the \(AppStrings.profileName(profile, languageID: languageID)) API key before generating summaries."
                 : "需要先保存 \(AppStrings.profileName(profile, languageID: languageID)) 的 API Key 才能生成摘要。"
+        case .generatingSummaries(let profile, let count):
+            return AppStrings.isEnglish(languageID)
+                ? "Generating \(count) Skill summaries using \(AppStrings.profileName(profile, languageID: languageID))..."
+                : "正在使用 \(AppStrings.profileName(profile, languageID: languageID)) 批量生成 \(count) 条 Skill 摘要..."
+        case .summaryAlreadyGenerated:
+            return AppStrings.isEnglish(languageID)
+                ? "All Skills in the current filter already have generated summaries."
+                : "当前筛选范围内的 Skill 都已经有生成摘要。"
         case .summaryDone(let profile):
             return AppStrings.isEnglish(languageID)
                 ? "Skill summaries were generated or loaded from cache using \(AppStrings.profileName(profile, languageID: languageID))."

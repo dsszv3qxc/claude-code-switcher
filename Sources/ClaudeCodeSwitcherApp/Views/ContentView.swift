@@ -528,6 +528,13 @@ struct ContentView: View {
                         Label(t("检查当前分类更新"), systemImage: "arrow.down.circle")
                     }
                     .disabled(viewModel.skills.isEmpty || viewModel.isCheckingSkillUpdates)
+
+                    Button {
+                        viewModel.generateFilteredSkillSummaries(languageID: languageID)
+                    } label: {
+                        Label(t("批量生成摘要"), systemImage: "text.bubble")
+                    }
+                    .disabled(viewModel.filteredSkills.isEmpty || viewModel.isSummarizingSkills)
                 } label: {
                     Image(systemName: "ellipsis.circle")
                         .frame(width: 24, height: 24)

@@ -67,6 +67,7 @@
 "关闭自动摘要" = "Turn Off Summaries";
 "刷新技能库" = "Refresh Skill Library";
 "检查当前分类更新" = "Check Current Category";
+"批量生成摘要" = "Generate Summaries";
 "没有扫描到 Skill" = "No Skills Found";
 "这个分类下没有 Skill" = "No Skills In This Category";
 "选择一个 Skill" = "Select a Skill";

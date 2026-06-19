@@ -50,7 +50,8 @@ enum AppStrings {
             ("无法写入 Claude Code 配置：", "Could not write Claude Code settings: "),
             ("无法从钥匙串读取 API Key。OSStatus ", "Could not read the API key from Keychain. OSStatus "),
             ("无法把 API Key 保存到钥匙串。OSStatus ", "Could not save the API key to Keychain. OSStatus "),
-            ("更新失败：", "Update failed: ")
+            ("更新失败：", "Update failed: "),
+            ("安装失败：", "Installation failed: ")
         ]
 
         for pattern in patterns where key.hasPrefix(pattern.prefix) {
@@ -107,6 +108,8 @@ enum AppStrings {
         "检查版本": "Check Version",
         "更新中": "Updating",
         "更新 Claude Code": "Update Claude Code",
+        "安装中": "Installing",
+        "安装 Claude Code": "Install Claude Code",
         "重新应用": "Reapply",
         "应用模式": "Apply Mode",
         "保存并应用": "Save & Apply",
@@ -151,6 +154,7 @@ enum AppStrings {
         "状态": "Status",
         "来源": "Source",
         "版本": "Version",
+        "摘要": "Summary",
         "支持文件": "Support Files",
         "名称": "Name",
         "插件": "Plugin",
@@ -178,13 +182,18 @@ enum AppStrings {
         "Claude Code 版本：未检查": "Claude Code Version: Not Checked",
         "检查不会更新或修改 Claude Code。": "Checking does not update or modify Claude Code.",
         "正在检查 Claude Code 版本...": "Checking Claude Code version...",
-        "正在读取本机版本并查询 npm 最新版本。": "Reading local version and querying the latest npm version.",
+        "正在读取本机版本并查询官方最新版本。": "Reading local version and querying the official latest version.",
         "正在更新 Claude Code...": "Updating Claude Code...",
-        "后台执行 npm update，不会打开终端窗口。": "Running npm update in the background without opening Terminal.",
+        "后台执行 claude update，不会打开终端窗口。": "Running claude update in the background without opening Terminal.",
+        "正在安装 Claude Code...": "Installing Claude Code...",
+        "后台执行 Claude 官方原生安装脚本，不会打开终端窗口。": "Running Claude's official native installer in the background without opening Terminal.",
         "未找到 Claude Code": "Claude Code Not Found",
-        "请先确认终端里可以运行 claude，再重新检查版本。": "Make sure `claude` works in Terminal, then check again.",
+        "Claude Code：无法读取版本": "Claude Code: Could Not Read Version",
+        "未找到本机 claude。可以点击安装按钮安装 Claude Code CLI。": "Local `claude` was not found. Click Install Claude Code to install the CLI.",
         "未选择": "Not Selected",
         "没有错误输出。": "No error output.",
+        "未找到 Claude Code，无法自动更新。": "Claude Code was not found, so it cannot be updated automatically.",
+        "Claude Code 安装完成，已重新检查版本。": "Claude Code installation finished. Version was checked again.",
         "这个 Skill 已暂停，恢复使用后再检查更新。": "This Skill is paused. Resume it before checking for updates.",
         "插件或系统 Skill 由对应客户端管理。": "Plugin or system Skills are managed by their owning client.",
         "这个个人 Skill 不是 git 安装，无法判断远端更新。": "This personal Skill was not installed from git, so remote updates cannot be detected.",

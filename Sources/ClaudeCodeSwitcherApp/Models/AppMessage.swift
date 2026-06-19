@@ -20,9 +20,12 @@ enum AppMessage: Equatable, Sendable {
     case checkingVersionDetail
     case updatingVersion
     case updatingVersionDetail
+    case installingVersion
+    case installingVersionDetail
     case versionSummary(ClaudeVersionInfo)
     case versionDetail(ClaudeVersionInfo)
     case updateResult(ClaudeVersionUpdateResult)
+    case installResult(ClaudeVersionUpdateResult)
 
     case skillNotScanned
     case scannedSkills(total: Int, personal: Int, plugin: Int, paused: Int)
@@ -89,17 +92,23 @@ enum AppMessage: Equatable, Sendable {
         case .checkingVersion:
             return AppStrings.text("正在检查 Claude Code 版本...", languageID: languageID)
         case .checkingVersionDetail:
-            return AppStrings.text("正在读取本机版本并查询 npm 最新版本。", languageID: languageID)
+            return AppStrings.text("正在读取本机版本并查询官方最新版本。", languageID: languageID)
         case .updatingVersion:
             return AppStrings.text("正在更新 Claude Code...", languageID: languageID)
         case .updatingVersionDetail:
-            return AppStrings.text("后台执行 npm update，不会打开终端窗口。", languageID: languageID)
+            return AppStrings.text("后台执行 claude update，不会打开终端窗口。", languageID: languageID)
+        case .installingVersion:
+            return AppStrings.text("正在安装 Claude Code...", languageID: languageID)
+        case .installingVersionDetail:
+            return AppStrings.text("后台执行 Claude 官方原生安装脚本，不会打开终端窗口。", languageID: languageID)
         case .versionSummary(let info):
             return versionSummaryText(info, languageID: languageID)
         case .versionDetail(let info):
             return versionDetailText(info, languageID: languageID)
         case .updateResult(let result):
             return updateResultText(result, languageID: languageID)
+        case .installResult(let result):
+            return installResultText(result, languageID: languageID)
 
         case .skillNotScanned:
             return AppStrings.isEnglish(languageID) ? "Skills: Not Scanned" : "Skill：未扫描"
@@ -167,6 +176,9 @@ enum AppMessage: Equatable, Sendable {
 
     private func versionSummaryText(_ info: ClaudeVersionInfo, languageID: String) -> String {
         guard let currentVersion = info.currentVersion else {
+            if info.claudePath != nil {
+                return AppStrings.text("Claude Code：无法读取版本", languageID: languageID)
+            }
             return AppStrings.text("未找到 Claude Code", languageID: languageID)
         }
 
@@ -188,19 +200,24 @@ enum AppMessage: Equatable, Sendable {
 
     private func versionDetailText(_ info: ClaudeVersionInfo, languageID: String) -> String {
         guard info.currentVersion != nil else {
-            return AppStrings.text("请先确认终端里可以运行 claude，再重新检查版本。", languageID: languageID)
+            if let claudePath = info.claudePath {
+                return AppStrings.isEnglish(languageID)
+                    ? "Found claude at \(claudePath), but could not parse its version output. Try running claude --version in Terminal."
+                    : "已找到 claude：\(claudePath)，但无法解析版本输出。可在终端运行 claude --version 检查。"
+            }
+            return AppStrings.text("未找到本机 claude。可以点击安装按钮安装 Claude Code CLI。", languageID: languageID)
         }
 
         if info.hasUpdate {
             return AppStrings.isEnglish(languageID)
-                ? "You can run: npm update -g @anthropic-ai/claude-code. You can also run claude doctor first."
-                : "可在终端运行：npm update -g @anthropic-ai/claude-code。也可以先运行 claude doctor 查看自动更新状态。"
+                ? "Click Update Claude Code, or run claude update in Terminal."
+                : "可点击更新按钮，或在终端运行 claude update。"
         }
 
         if info.latestVersion == nil {
             return AppStrings.isEnglish(languageID)
-                ? "Local claude was found. If npm lookup failed, run npm view @anthropic-ai/claude-code version in Terminal."
-                : "已找到本机 claude；网络或 npm 查询失败时，可以在终端运行 npm view @anthropic-ai/claude-code version。"
+                ? "Local claude was found. If the network lookup failed, run claude doctor or try again later."
+                : "已找到本机 claude；网络查询失败时，可以在终端运行 claude doctor 或稍后再试。"
         }
 
         return AppStrings.isEnglish(languageID)
@@ -218,6 +235,20 @@ enum AppMessage: Equatable, Sendable {
         let message = AppStrings.text(result.message, languageID: languageID)
         if AppStrings.isEnglish(languageID), message == result.message, result.message.hasPrefix("更新失败：") {
             return "Update failed: \(result.message.dropFirst("更新失败：".count))"
+        }
+        return message
+    }
+
+    private func installResultText(_ result: ClaudeVersionUpdateResult, languageID: String) -> String {
+        if result.succeeded {
+            return AppStrings.isEnglish(languageID)
+                ? "Claude Code installation finished. Version was checked again."
+                : "Claude Code 安装完成，已重新检查版本。"
+        }
+
+        let message = AppStrings.text(result.message, languageID: languageID)
+        if AppStrings.isEnglish(languageID), message == result.message, result.message.hasPrefix("安装失败：") {
+            return "Installation failed: \(result.message.dropFirst("安装失败：".count))"
         }
         return message
     }

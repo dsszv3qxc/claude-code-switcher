@@ -348,7 +348,16 @@ struct ContentView: View {
                 } label: {
                     Label(t("检查版本"), systemImage: "arrow.down.circle")
                 }
-                .disabled(viewModel.isCheckingVersion || viewModel.isUpdatingVersion)
+                .disabled(viewModel.isCheckingVersion || viewModel.isUpdatingVersion || viewModel.isInstallingVersion)
+
+                if viewModel.canInstallClaudeCode || viewModel.isInstallingVersion {
+                    Button {
+                        viewModel.installClaudeCodeVersion()
+                    } label: {
+                        Label(t(viewModel.isInstallingVersion ? "安装中" : "安装 Claude Code"), systemImage: "tray.and.arrow.down")
+                    }
+                    .disabled(viewModel.isInstallingVersion || viewModel.isCheckingVersion || viewModel.isUpdatingVersion)
+                }
 
                 if viewModel.canUpdateClaudeCode || viewModel.isUpdatingVersion {
                     Button {
@@ -356,7 +365,7 @@ struct ContentView: View {
                     } label: {
                         Label(t(viewModel.isUpdatingVersion ? "更新中" : "更新 Claude Code"), systemImage: "square.and.arrow.down")
                     }
-                    .disabled(viewModel.isUpdatingVersion || viewModel.isCheckingVersion)
+                    .disabled(viewModel.isUpdatingVersion || viewModel.isCheckingVersion || viewModel.isInstallingVersion)
                 }
 
                 Spacer()
@@ -388,7 +397,7 @@ struct ContentView: View {
                 Text(viewModel.versionDetailText(languageID: languageID))
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                    .lineLimit(2)
+                    .lineLimit(3)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
@@ -399,6 +408,9 @@ struct ContentView: View {
     private var versionIcon: String {
         if viewModel.isUpdatingVersion {
             return "arrow.triangle.2.circlepath"
+        }
+        if viewModel.isInstallingVersion {
+            return "tray.and.arrow.down"
         }
         if viewModel.isCheckingVersion {
             return "clock"
@@ -797,6 +809,7 @@ private struct SkillDetailView: View {
                     Divider()
 
                     VStack(alignment: .leading, spacing: 14) {
+                        DetailTextBlock(title: "摘要", value: summary, languageID: languageID)
                         DetailTextBlock(title: "如何使用", value: usageText, languageID: languageID)
                         DetailTextBlock(title: "原始描述", value: skill.description.isEmpty ? "没有描述" : skill.description, languageID: languageID)
                         DetailTextBlock(title: "工具权限", value: toolsText, languageID: languageID)

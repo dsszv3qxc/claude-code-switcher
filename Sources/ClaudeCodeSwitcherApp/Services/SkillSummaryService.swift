@@ -4,6 +4,7 @@ import ClaudeCodeSwitcherCore
 
 struct SkillSummaryService: Sendable {
     private let cacheURL: URL
+    private static let summaryPromptVersion = "skill-summary-v2-2026-06-19"
 
     init() {
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
@@ -27,7 +28,7 @@ struct SkillSummaryService: Sendable {
                 : "无法读取 Skill 内容，暂时不能生成摘要。")
         }
 
-        let fingerprint = Self.fingerprint(for: "\(languageID)\n\(provider.id)\n\(skillText)")
+        let fingerprint = Self.fingerprint(for: "\(Self.summaryPromptVersion)\n\(languageID)\n\(provider.id)\n\(skillText)")
         if let cached = cachedSummary(for: fingerprint) {
             return .ready(cached)
         }
@@ -53,11 +54,43 @@ struct SkillSummaryService: Sendable {
               let skillText = try? String(contentsOf: skill.skillFile, encoding: .utf8) else {
             return nil
         }
-        let fingerprint = Self.fingerprint(for: "\(languageID)\n\(provider.id)\n\(skillText)")
+        let fingerprint = Self.fingerprint(for: "\(Self.summaryPromptVersion)\n\(languageID)\n\(provider.id)\n\(skillText)")
         return cachedSummary(for: fingerprint)
     }
 
     private func requestSummary(skill: ClaudeSkillRecord, skillText: String, provider: BackendProfile, apiKey: String, languageID: String) async throws -> String {
+        do {
+            return try await performSummaryRequest(
+                skill: skill,
+                skillText: skillText,
+                provider: provider,
+                apiKey: apiKey,
+                languageID: languageID,
+                maxTokens: 320,
+                skillTextLimit: 7_000
+            )
+        } catch SummaryError.truncatedResponse {
+            return try await performSummaryRequest(
+                skill: skill,
+                skillText: skillText,
+                provider: provider,
+                apiKey: apiKey,
+                languageID: languageID,
+                maxTokens: 640,
+                skillTextLimit: 5_000
+            )
+        }
+    }
+
+    private func performSummaryRequest(
+        skill: ClaudeSkillRecord,
+        skillText: String,
+        provider: BackendProfile,
+        apiKey: String,
+        languageID: String,
+        maxTokens: Int,
+        skillTextLimit: Int
+    ) async throws -> String {
         guard let url = messagesURL(for: provider),
               let model = provider.primaryModel?.trimmingCharacters(in: .whitespacesAndNewlines),
               !model.isEmpty else {
@@ -71,19 +104,19 @@ struct SkillSummaryService: Sendable {
         request.setValue(apiKey, forHTTPHeaderField: "x-api-key")
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
 
-        let clippedSkillText = String(skillText.prefix(4_500))
+        let clippedSkillText = String(skillText.prefix(skillTextLimit))
         let wantsEnglish = languageID.hasPrefix("en")
         let payload = AnthropicSummaryRequest(
             model: model,
             system: wantsEnglish
-                ? "You summarize Claude Code Skills for a macOS utility. Output concise English only. Do not use Markdown or bullet points."
-                : "你是一个 macOS 工具里的 Skill 管理摘要器。只输出中文，不要 Markdown，不要项目符号。",
+                ? "You summarize Claude Code Skills for a macOS utility. Output concise English only. Do not use Markdown or bullet points. Always return a complete sentence."
+                : "你是一个 macOS 工具里的 Skill 管理摘要器。只输出中文，不要 Markdown，不要项目符号。必须输出完整句子，不要在句尾截断。",
             messages: [
                 AnthropicMessage(
                     role: "user",
                     content: wantsEnglish
                         ? """
-                        Summarize what this Skill helps the user do in one plain-English sentence, under 35 words.
+                        Summarize what this Skill helps the user do in one plain-English sentence, under 45 words.
                         Do not mention file paths. Do not start with "This Skill".
 
                         Name: \(skill.commandName)
@@ -94,7 +127,7 @@ struct SkillSummaryService: Sendable {
                         \(clippedSkillText)
                         """
                         : """
-                        请把下面这个 Skill 的用途总结成一小段通俗中文，最多 80 个汉字。
+                        请把下面这个 Skill 的用途总结成一小段通俗中文，控制在 80 到 120 个汉字之间。
                         需要说明它主要帮用户完成什么，不要翻译文件路径，不要提“这个 Skill”。
 
                         名称：\(skill.commandName)
@@ -107,7 +140,7 @@ struct SkillSummaryService: Sendable {
                 )
             ],
             temperature: 0.2,
-            max_tokens: 120
+            max_tokens: maxTokens
         )
         request.httpBody = try JSONEncoder().encode(payload)
 
@@ -120,11 +153,22 @@ struct SkillSummaryService: Sendable {
             throw SummaryError.httpStatus(httpResponse.statusCode, body.map(String.init))
         }
 
-        let decoded = try JSONDecoder().decode(AnthropicSummaryResponse.self, from: data)
+        let decoded: AnthropicSummaryResponse
+        do {
+            decoded = try JSONDecoder().decode(AnthropicSummaryResponse.self, from: data)
+        } catch {
+            let body = String(data: data, encoding: .utf8)?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .prefix(260)
+            throw SummaryError.decodeFailed(body.map(String.init))
+        }
         let text = decoded.content.compactMap(\.text).joined(separator: " ")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else {
             throw SummaryError.emptyResponse
+        }
+        if decoded.stopReason == "max_tokens" {
+            throw SummaryError.truncatedResponse
         }
 
         return text.replacingOccurrences(of: "\n", with: " ")
@@ -208,10 +252,28 @@ private struct AnthropicMessage: Codable {
 
 private struct AnthropicSummaryResponse: Decodable {
     let content: [AnthropicContent]
+    let stopReason: String?
+
+    enum CodingKeys: String, CodingKey {
+        case content
+        case stopReason = "stop_reason"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        if let blocks = try? container.decode([AnthropicContent].self, forKey: .content) {
+            content = blocks
+        } else if let text = try? container.decode(String.self, forKey: .content) {
+            content = [AnthropicContent(type: "text", text: text)]
+        } else {
+            content = []
+        }
+        stopReason = try? container.decode(String.self, forKey: .stopReason)
+    }
 }
 
 private struct AnthropicContent: Decodable {
-    let type: String
+    let type: String?
     let text: String?
 }
 
@@ -219,6 +281,8 @@ private enum SummaryError: LocalizedError {
     case httpStatus(Int, String?)
     case emptyResponse
     case invalidProvider
+    case truncatedResponse
+    case decodeFailed(String?)
 
     var errorDescription: String? {
         switch self {
@@ -232,6 +296,14 @@ private enum SummaryError: LocalizedError {
             "摘要模型没有返回摘要内容"
         case .invalidProvider:
             "摘要模型配置不完整"
+        case .truncatedResponse:
+            "摘要模型返回内容被截断"
+        case .decodeFailed(let body):
+            if let body, !body.isEmpty {
+                "无法解析摘要模型返回内容：\(body)"
+            } else {
+                "无法解析摘要模型返回内容"
+            }
         }
     }
 }
@@ -275,7 +347,7 @@ private func summaryFailureMessage(_ error: Error, languageID: String) -> String
             }
             let bodyText = body.map { " 返回内容：\($0)" } ?? ""
             return "\(prefix)：HTTP \(status)。\(hint)\(bodyText)"
-        case .emptyResponse, .invalidProvider:
+        case .emptyResponse, .invalidProvider, .truncatedResponse, .decodeFailed:
             break
         }
     }

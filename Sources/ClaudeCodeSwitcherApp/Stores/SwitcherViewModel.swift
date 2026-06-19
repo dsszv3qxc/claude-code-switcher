@@ -37,9 +37,12 @@ final class SwitcherViewModel: ObservableObject {
     @Published var isCheckingVersion = false
     @Published var isUpdatingVersion = false
     @Published var canUpdateClaudeCode = false
+    @Published var isInstallingVersion = false
+    @Published var canInstallClaudeCode = false
     @Published var isRefreshingSkills = false
     @Published var isCheckingSkillUpdates = false
     @Published var isMutatingSkill = false
+    @Published var generatedSummaryKeys: Set<String> = []
 
     private let settingsStore: ClaudeSettingsStore
     private let keychainStore: KeychainStore
@@ -222,7 +225,7 @@ final class SwitcherViewModel: ObservableObject {
     }
 
     func hasGeneratedSummary(for skill: ClaudeSkillRecord, languageID: String) -> Bool {
-        skillSummaries[summaryKey(for: skill, languageID: languageID)] != nil
+        generatedSummaryKeys.contains(summaryKey(for: skill, languageID: languageID))
     }
 
     func usageText(for skill: ClaudeSkillRecord, languageID: String) -> String {
@@ -260,7 +263,9 @@ final class SwitcherViewModel: ObservableObject {
             skillStatusMessage = .autoSummaryOffNeedProvider
             return
         }
-        skillSummaries[summaryKey(for: selectedSkill, languageID: languageID)] = AppStrings.text("正在重新生成摘要...", languageID: languageID)
+        let key = summaryKey(for: selectedSkill, languageID: languageID)
+        generatedSummaryKeys.remove(key)
+        skillSummaries[key] = AppStrings.text("正在重新生成摘要...", languageID: languageID)
         generateSummaries(for: [selectedSkill], languageID: languageID, force: true)
     }
 
@@ -359,9 +364,10 @@ final class SwitcherViewModel: ObservableObject {
     }
 
     func checkClaudeVersion() {
-        guard !isCheckingVersion else { return }
+        guard !isCheckingVersion, !isUpdatingVersion, !isInstallingVersion else { return }
         isCheckingVersion = true
         canUpdateClaudeCode = false
+        canInstallClaudeCode = false
         versionSummary = .checkingVersion
         versionDetail = .checkingVersionDetail
 
@@ -371,6 +377,7 @@ final class SwitcherViewModel: ObservableObject {
                 versionSummary = .versionSummary(info)
                 versionDetail = .versionDetail(info)
                 canUpdateClaudeCode = info.hasUpdate
+                canInstallClaudeCode = info.canInstall
                 isCheckingVersion = false
             }
         }
@@ -380,6 +387,7 @@ final class SwitcherViewModel: ObservableObject {
         guard canUpdateClaudeCode, !isUpdatingVersion else { return }
         isUpdatingVersion = true
         canUpdateClaudeCode = false
+        canInstallClaudeCode = false
         versionSummary = .updatingVersion
         versionDetail = .updatingVersionDetail
 
@@ -390,7 +398,29 @@ final class SwitcherViewModel: ObservableObject {
                 versionSummary = .versionSummary(info)
                 versionDetail = updateResult.succeeded ? .versionDetail(info) : .updateResult(updateResult)
                 canUpdateClaudeCode = info.hasUpdate
+                canInstallClaudeCode = info.canInstall
                 isUpdatingVersion = false
+            }
+        }
+    }
+
+    func installClaudeCodeVersion() {
+        guard canInstallClaudeCode, !isInstallingVersion, !isCheckingVersion, !isUpdatingVersion else { return }
+        isInstallingVersion = true
+        canInstallClaudeCode = false
+        canUpdateClaudeCode = false
+        versionSummary = .installingVersion
+        versionDetail = .installingVersionDetail
+
+        Task {
+            let installResult = await versionChecker.install()
+            let info = await versionChecker.check()
+            await MainActor.run {
+                versionSummary = .versionSummary(info)
+                versionDetail = installResult.succeeded ? .versionDetail(info) : .installResult(installResult)
+                canUpdateClaudeCode = info.hasUpdate
+                canInstallClaudeCode = info.canInstall
+                isInstallingVersion = false
             }
         }
     }
@@ -533,10 +563,14 @@ final class SwitcherViewModel: ObservableObject {
 
     private func generateSummaries(for records: [ClaudeSkillRecord], languageID: String, force: Bool = false) {
         guard !records.isEmpty else { return }
-        let targets = records.filter { force || skillSummaries[summaryKey(for: $0, languageID: languageID)] == nil }
+        let providerID = selectedSummaryProfileID
+        let targets = records.filter { record in
+            let key = summaryKey(for: record, providerID: providerID, languageID: languageID)
+            return force || (!generatedSummaryKeys.contains(key) && skillSummaries[key] == nil)
+        }
         guard !targets.isEmpty else { return }
 
-        guard selectedSummaryProfileID != Self.summaryDisabledID else {
+        guard providerID != Self.summaryDisabledID else {
             isSummarizingSkills = false
             if force {
                 skillStatusMessage = .autoSummaryOffNeedProvider
@@ -544,7 +578,7 @@ final class SwitcherViewModel: ObservableObject {
             return
         }
 
-        guard let summaryProfile = backendProfiles.first(where: { $0.id == selectedSummaryProfileID && $0.needsAPIKey }) else {
+        guard let summaryProfile = backendProfiles.first(where: { $0.id == providerID && $0.needsAPIKey }) else {
             isSummarizingSkills = false
             skillStatusMessage = .selectSummaryProvider
             return
@@ -558,7 +592,7 @@ final class SwitcherViewModel: ObservableObject {
             var needsKey = false
             var failureCount = 0
             for record in targets {
-                let summaryKey = summaryKey(for: record, languageID: languageID)
+                let summaryKey = summaryKey(for: record, providerID: providerID, languageID: languageID)
                 let result = await skillSummaryService.summary(
                     for: record,
                     provider: summaryProfile,
@@ -567,10 +601,14 @@ final class SwitcherViewModel: ObservableObject {
                 )
                 await MainActor.run {
                     skillSummaries[summaryKey] = result.text
-                    if case .needsAPIKey = result {
+                    switch result {
+                    case .ready:
+                        generatedSummaryKeys.insert(summaryKey)
+                    case .needsAPIKey:
+                        generatedSummaryKeys.remove(summaryKey)
                         needsKey = true
-                    }
-                    if case .failed = result {
+                    case .failed:
+                        generatedSummaryKeys.remove(summaryKey)
                         failureCount += 1
                     }
                 }
@@ -581,10 +619,12 @@ final class SwitcherViewModel: ObservableObject {
 
             await MainActor.run {
                 if needsKey {
-                    for record in targets where skillSummaries[summaryKey(for: record, languageID: languageID)] == nil {
-                        skillSummaries[summaryKey(for: record, languageID: languageID)] = record.description.isEmpty
+                    for record in targets where skillSummaries[summaryKey(for: record, providerID: providerID, languageID: languageID)] == nil {
+                        let missingKey = summaryKey(for: record, providerID: providerID, languageID: languageID)
+                        skillSummaries[missingKey] = record.description.isEmpty
                             ? AppStrings.text("需要先保存摘要模型 API Key。", languageID: languageID)
                             : record.description
+                        generatedSummaryKeys.remove(missingKey)
                     }
                     skillStatusMessage = .summaryNeedsKey(summaryProfile)
                 } else {
@@ -611,12 +651,18 @@ final class SwitcherViewModel: ObservableObject {
             ) else {
                 continue
             }
-            skillSummaries[summaryKey(for: record, languageID: languageID)] = cached
+            let key = summaryKey(for: record, providerID: summaryProfile.id, languageID: languageID)
+            skillSummaries[key] = cached
+            generatedSummaryKeys.insert(key)
         }
     }
 
     private func summaryKey(for skill: ClaudeSkillRecord, languageID: String) -> String {
-        "\(languageID)|\(selectedSummaryProfileID)|\(skill.id)"
+        summaryKey(for: skill, providerID: selectedSummaryProfileID, languageID: languageID)
+    }
+
+    private func summaryKey(for skill: ClaudeSkillRecord, providerID: String, languageID: String) -> String {
+        "\(languageID)|\(providerID)|\(skill.id)"
     }
 
     private var currentLanguageID: String {

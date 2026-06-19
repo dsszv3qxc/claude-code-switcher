@@ -40,6 +40,8 @@
 "检查版本" = "Check Version";
 "更新中" = "Updating";
 "更新 Claude Code" = "Update Claude Code";
+"安装中" = "Installing";
+"安装 Claude Code" = "Install Claude Code";
 "重新应用" = "Reapply";
 "应用模式" = "Apply Mode";
 "保存并应用" = "Save & Apply";
@@ -47,9 +49,13 @@
 "Claude Code 版本：未检查" = "Claude Code Version: Not Checked";
 "检查不会更新或修改 Claude Code。" = "Checking does not update or modify Claude Code.";
 "正在检查 Claude Code 版本..." = "Checking Claude Code version...";
-"正在读取本机版本并查询 npm 最新版本。" = "Reading local version and querying the latest npm version.";
+"正在读取本机版本并查询官方最新版本。" = "Reading local version and querying the official latest version.";
 "正在更新 Claude Code..." = "Updating Claude Code...";
-"后台执行 npm update，不会打开终端窗口。" = "Running npm update in the background without opening Terminal.";
+"后台执行 claude update，不会打开终端窗口。" = "Running claude update in the background without opening Terminal.";
+"正在安装 Claude Code..." = "Installing Claude Code...";
+"后台执行 Claude 官方原生安装脚本，不会打开终端窗口。" = "Running Claude's official native installer in the background without opening Terminal.";
+"未找到本机 claude。可以点击安装按钮安装 Claude Code CLI。" = "Local `claude` was not found. Click Install Claude Code to install the CLI.";
+"Claude Code：无法读取版本" = "Claude Code: Could Not Read Version";
 "当前模式：Claude 订阅" = "Current mode: Claude Subscription";
 "当前模式：DeepSeek V4 Pro" = "Current mode: DeepSeek V4 Pro";
 "当前模式：DeepSeek V4 Flash" = "Current mode: DeepSeek V4 Flash";
@@ -98,6 +104,7 @@
 "状态" = "Status";
 "来源" = "Source";
 "版本" = "Version";
+"摘要" = "Summary";
 "支持文件" = "Support Files";
 "名称" = "Name";
 "插件" = "Plugin";

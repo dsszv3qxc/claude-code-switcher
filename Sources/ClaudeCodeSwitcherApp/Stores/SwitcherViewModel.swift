@@ -21,6 +21,7 @@ final class SwitcherViewModel: ObservableObject {
     @Published var versionSummary: AppMessage = .versionNotChecked
     @Published var versionDetail: AppMessage = .versionCheckDoesNotModify
     @Published var selectedSection: AppSection = .backend
+    @Published var selectedEffortLevel: ClaudeEffortLevel = .auto
     @Published var skills: [ClaudeSkillRecord] = []
     @Published var selectedSkillID: ClaudeSkillRecord.ID?
     @Published var selectedSkillCategory: String = "全部分类" {
@@ -172,12 +173,30 @@ final class SwitcherViewModel: ObservableObject {
             let document = try settingsStore.load()
             currentProfile = document.detectedProfile(in: backendProfiles)
             selectedProfileID = currentProfile.id
+            selectedEffortLevel = document.detectedEffortLevel
             isAddingCustomBackend = false
             loadKeyForSelectedProfileIfAvailable()
             statusMessage = .currentMode(currentProfile)
         } catch {
             statusMessage = .raw(error.localizedDescription)
         }
+    }
+
+    func saveEffortLevel() {
+        do {
+            var document = try settingsStore.load()
+            document.applyEffortLevel(selectedEffortLevel)
+            try settingsStore.save(document)
+            statusMessage = .effortSaved(selectedEffortLevel)
+        } catch {
+            statusMessage = .raw(error.localizedDescription)
+        }
+    }
+
+    func setEffortLevel(_ level: ClaudeEffortLevel) {
+        guard selectedEffortLevel != level else { return }
+        selectedEffortLevel = level
+        saveEffortLevel()
     }
 
     func refreshSkills() {

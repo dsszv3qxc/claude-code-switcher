@@ -124,7 +124,9 @@ struct ContentView: View {
                     .font(.title3.weight(.semibold))
             }
 
-            Spacer()
+            Spacer(minLength: 18)
+
+            effortControl
 
             if !viewModel.isCurrentSelection || viewModel.isAddingCustomBackend {
                 Text(t("尚未应用"))
@@ -148,6 +150,35 @@ struct ContentView: View {
                         .stroke(Color.secondary.opacity(0.12), lineWidth: 1)
                 }
         }
+    }
+
+    private var effortControl: some View {
+        VStack(alignment: .trailing, spacing: 5) {
+            HStack(spacing: 8) {
+                Text(t("全局 Effort"))
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.secondary)
+
+                Picker("", selection: Binding(
+                    get: { viewModel.selectedEffortLevel },
+                    set: { viewModel.setEffortLevel($0) }
+                )) {
+                    ForEach(ClaudeEffortLevel.allCases) { level in
+                        Text(AppStrings.effortLabel(level, languageID: languageID))
+                            .tag(level)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .frame(width: 330)
+            }
+
+            Text(AppStrings.effortHelp(viewModel.selectedEffortLevel, languageID: languageID))
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        }
+        .accessibilityElement(children: .combine)
+        .help(AppStrings.effortHelp(viewModel.selectedEffortLevel, languageID: languageID))
     }
 
     private var modeGrid: some View {

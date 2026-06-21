@@ -44,6 +44,57 @@ enum AppStrings {
         "\(profileName(profile, languageID: languageID)) API Key"
     }
 
+    static func effortLabel(_ level: ClaudeEffortLevel, languageID: String) -> String {
+        switch level {
+        case .auto:
+            return isEnglish(languageID) ? "Auto" : "自动"
+        case .low:
+            return isEnglish(languageID) ? "Low" : "低"
+        case .medium:
+            return isEnglish(languageID) ? "Medium" : "中"
+        case .high:
+            return isEnglish(languageID) ? "High" : "高"
+        case .xhigh:
+            return isEnglish(languageID) ? "XHigh" : "更高"
+        case .max:
+            return isEnglish(languageID) ? "Max" : "Max"
+        }
+    }
+
+    static func effortHelp(_ level: ClaudeEffortLevel, languageID: String) -> String {
+        if isEnglish(languageID) {
+            return switch level {
+            case .auto:
+                "Use Claude Code's model default."
+            case .low:
+                "Fastest; best for small scoped tasks."
+            case .medium:
+                "Lower token use with reasonable reasoning."
+            case .high:
+                "Balanced default for most coding tasks."
+            case .xhigh:
+                "Deeper reasoning with higher token use."
+            case .max:
+                "Deepest reasoning; set through environment override."
+            }
+        }
+
+        return switch level {
+        case .auto:
+            "跟随 Claude Code 的模型默认值。"
+        case .low:
+            "最快，适合小而明确的任务。"
+        case .medium:
+            "更省 token，保留基础推理。"
+        case .high:
+            "较均衡，适合多数编码任务。"
+        case .xhigh:
+            "更深推理，token 消耗更高。"
+        case .max:
+            "最深推理，通过环境变量覆盖。"
+        }
+    }
+
     private static func dynamicEnglishText(_ key: String) -> String? {
         let patterns: [(prefix: String, replacement: String)] = [
             ("无法读取 Claude Code 配置：", "Could not read Claude Code settings: "),
@@ -71,6 +122,7 @@ enum AppStrings {
         "后端切换": "Backend",
         "Skill 管理": "Skills",
         "当前生效": "Active",
+        "全局 Effort": "Global Effort",
         "尚未应用": "Pending",
         "选择模式": "Mode",
         "当前": "Current",

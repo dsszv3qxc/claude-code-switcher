@@ -28,6 +28,7 @@ public struct SettingsDocument: Equatable {
         "ANTHROPIC_SMALL_FAST_MODEL",
         "CLAUDE_CODE_SUBAGENT_MODEL"
     ]
+    public static let effortEnvironmentKey = "CLAUDE_CODE_EFFORT_LEVEL"
 
     public var detectedMode: ClaudeMode {
         let profile = detectedProfile(in: BackendProfile.builtIns)
@@ -86,6 +87,21 @@ public struct SettingsDocument: Equatable {
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    public var detectedEffortLevel: ClaudeEffortLevel {
+        let env = object["env"] as? [String: Any]
+        if let raw = env?[Self.effortEnvironmentKey] as? String,
+           let level = ClaudeEffortLevel(rawValue: raw.trimmingCharacters(in: .whitespacesAndNewlines)) {
+            return level
+        }
+
+        if let raw = object["effortLevel"] as? String,
+           let level = ClaudeEffortLevel(rawValue: raw.trimmingCharacters(in: .whitespacesAndNewlines)) {
+            return level
+        }
+
+        return .auto
+    }
+
     public mutating func apply(mode: ClaudeMode, apiKey: String?) throws {
         try apply(profile: mode.backendProfile, apiKey: apiKey)
     }
@@ -99,6 +115,27 @@ public struct SettingsDocument: Equatable {
                 throw SwitcherError.missingAPIKey
             }
             try setAnthropicCompatibleEnvironment(profile: profile, apiKey: apiKey)
+        }
+    }
+
+    public mutating func applyEffortLevel(_ level: ClaudeEffortLevel) {
+        var env = object["env"] as? [String: Any] ?? [:]
+        env.removeValue(forKey: Self.effortEnvironmentKey)
+
+        switch level {
+        case .auto:
+            object.removeValue(forKey: "effortLevel")
+        case .low, .medium, .high, .xhigh:
+            object["effortLevel"] = level.rawValue
+        case .max:
+            object.removeValue(forKey: "effortLevel")
+            env[Self.effortEnvironmentKey] = level.rawValue
+        }
+
+        if env.isEmpty {
+            object.removeValue(forKey: "env")
+        } else {
+            object["env"] = env
         }
     }
 

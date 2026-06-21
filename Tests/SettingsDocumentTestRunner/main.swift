@@ -10,10 +10,12 @@ struct SettingsDocumentTestRunner {
         try appliesClaudeSubscription()
         try appliesClaudeSubscriptionRemovesTopLevelDeepSeekModel()
         try detectsTopLevelDeepSeekModel()
+        try detectsAndAppliesPersistentEffort()
+        try appliesMaxAndClearsEffort()
         try comparesVersions()
         try parsesSkillMetadata()
         try scansPersonalAndPluginSkills()
-        print("SettingsDocumentTestRunner: 9 tests passed")
+        print("SettingsDocumentTestRunner: 11 tests passed")
     }
 
     private static func appliesDeepSeekPro() throws {
@@ -138,6 +140,51 @@ struct SettingsDocumentTestRunner {
         """.utf8))
 
         try expectEqual(document.detectedMode, .deepSeekFlash, "top-level model detected mode")
+    }
+
+    private static func detectsAndAppliesPersistentEffort() throws {
+        var document = try SettingsDocument(data: Data("""
+        {
+          "effortLevel": "medium",
+          "env": {
+            "API_TIMEOUT_MS": "1200000"
+          }
+        }
+        """.utf8))
+
+        try expectEqual(document.detectedEffortLevel, .medium, "detect persistent effort")
+        document.applyEffortLevel(.xhigh)
+
+        let env = try require(document.object["env"] as? [String: Any], "env should remain")
+        try expectEqual(document.object["effortLevel"] as? String, "xhigh", "persistent effort")
+        try expectEqual(env["API_TIMEOUT_MS"] as? String, "1200000", "unrelated env")
+        try expectNil(env[SettingsDocument.effortEnvironmentKey], "env effort should not be set for xhigh")
+        try expectEqual(document.detectedEffortLevel, .xhigh, "detect xhigh effort")
+    }
+
+    private static func appliesMaxAndClearsEffort() throws {
+        var document = try SettingsDocument(data: Data("""
+        {
+          "effortLevel": "high",
+          "env": {
+            "API_TIMEOUT_MS": "1200000"
+          }
+        }
+        """.utf8))
+
+        document.applyEffortLevel(.max)
+
+        var env = try require(document.object["env"] as? [String: Any], "env should exist for max")
+        try expectNil(document.object["effortLevel"], "max should not use effortLevel")
+        try expectEqual(env[SettingsDocument.effortEnvironmentKey] as? String, "max", "max effort env")
+        try expectEqual(document.detectedEffortLevel, .max, "detect max effort")
+
+        document.applyEffortLevel(.auto)
+        env = try require(document.object["env"] as? [String: Any], "unrelated env should remain")
+        try expectNil(document.object["effortLevel"], "auto should remove effortLevel")
+        try expectNil(env[SettingsDocument.effortEnvironmentKey], "auto should remove env effort")
+        try expectEqual(env["API_TIMEOUT_MS"] as? String, "1200000", "unrelated env preserved")
+        try expectEqual(document.detectedEffortLevel, .auto, "detect auto effort")
     }
 
     private static func require<T>(_ value: T?, _ message: String) throws -> T {

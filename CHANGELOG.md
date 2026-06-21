@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.5
+
+- Added a global Claude Code Effort control to the backend status panel.
+- Effort can be set to Auto, Low, Medium, High, XHigh, or Max before opening new Claude Code CLI sessions.
+- Persisted Effort settings into Claude Code's user settings while preserving unrelated configuration.
+
 ## 1.0.4
 
 - Added batch Skill summary generation from the Skill library menu.

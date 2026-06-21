@@ -13,6 +13,7 @@ enum AppMessage: Equatable, Sendable {
     case noSavedKey(BackendProfile)
     case loadedKey(BackendProfile)
     case savedKey(BackendProfile)
+    case effortSaved(ClaudeEffortLevel)
 
     case versionNotChecked
     case versionCheckDoesNotModify
@@ -86,6 +87,10 @@ enum AppMessage: Equatable, Sendable {
             return AppStrings.isEnglish(languageID)
                 ? "Saved \(AppStrings.profileName(profile, languageID: languageID)) API key to Keychain."
                 : "\(AppStrings.profileName(profile, languageID: languageID)) API Key 已保存到钥匙串。"
+        case .effortSaved(let level):
+            return AppStrings.isEnglish(languageID)
+                ? "Global Effort saved as \(AppStrings.effortLabel(level, languageID: languageID)). New Claude Code sessions will use it."
+                : "全局 Effort 已保存为 \(AppStrings.effortLabel(level, languageID: languageID))。新启动的 Claude Code 会话会使用它。"
 
         case .versionNotChecked:
             return AppStrings.text("Claude Code 版本：未检查", languageID: languageID)

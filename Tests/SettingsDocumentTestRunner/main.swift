@@ -7,6 +7,7 @@ struct SettingsDocumentTestRunner {
         try appliesDeepSeekPro()
         try appliesDeepSeekFlash()
         try appliesCustomAnthropicProfile()
+        try appliesOllamaProfileWithoutUserKey()
         try appliesClaudeSubscription()
         try appliesClaudeSubscriptionRemovesTopLevelDeepSeekModel()
         try detectsTopLevelDeepSeekModel()
@@ -15,7 +16,7 @@ struct SettingsDocumentTestRunner {
         try comparesVersions()
         try parsesSkillMetadata()
         try scansPersonalAndPluginSkills()
-        print("SettingsDocumentTestRunner: 11 tests passed")
+        print("SettingsDocumentTestRunner: 12 tests passed")
     }
 
     private static func appliesDeepSeekPro() throws {
@@ -85,6 +86,22 @@ struct SettingsDocumentTestRunner {
         try document.apply(profile: .claudeSubscription, apiKey: nil)
         try expectNil(document.object["model"], "custom top-level model should be removed on Claude mode")
         try expectNil((document.object["env"] as? [String: Any])?["ANTHROPIC_BASE_URL"], "custom route should be removed")
+    }
+
+    private static func appliesOllamaProfileWithoutUserKey() throws {
+        let profile = BackendProfile.ollama(modelName: "qwen3_6_27b_codex:latest")
+        var document = SettingsDocument(object: [:])
+
+        try document.apply(profile: profile, apiKey: nil)
+
+        let env = try require(document.object["env"] as? [String: Any], "env should exist")
+        try expectEqual(profile.needsAPIKey, false, "ollama profile should not need user api key")
+        try expectEqual(env["ANTHROPIC_BASE_URL"] as? String, "http://localhost:11434", "ollama base URL")
+        try expectEqual(env["ANTHROPIC_AUTH_TOKEN"] as? String, "ollama", "ollama fixed token")
+        try expectEqual(env["ANTHROPIC_MODEL"] as? String, "qwen3_6_27b_codex:latest", "ollama primary model")
+        try expectEqual(env["ANTHROPIC_SMALL_FAST_MODEL"] as? String, "qwen3_6_27b_codex:latest", "ollama fast model")
+        try expectEqual(document.object["model"] as? String, "qwen3_6_27b_codex:latest", "ollama top-level model")
+        try expectEqual(document.detectedProfile(in: BackendProfile.builtIns + [profile]), profile, "ollama profile detection")
     }
 
     private static func appliesClaudeSubscription() throws {

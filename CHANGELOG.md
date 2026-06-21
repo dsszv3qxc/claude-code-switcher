@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.6
+
+- Added dynamic local Ollama Qwen model discovery from `http://localhost:11434/api/tags`.
+- Ollama Qwen models now appear as selectable backends using Ollama's Anthropic-compatible API.
+- Ollama Qwen models can also be selected as local Skill summary providers.
+- Ollama backends use the local `ollama` auth token automatically and do not ask for an API key.
+- Improved backend layout to scroll when many local models are available.
+
 ## 1.0.5
 
 - Added a global Claude Code Effort control to the backend status panel.

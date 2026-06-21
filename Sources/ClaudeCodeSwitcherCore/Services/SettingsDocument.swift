@@ -111,10 +111,11 @@ public struct SettingsDocument: Equatable {
         case .claudeSubscription:
             clearRoutingEnvironment()
         case .anthropicCompatible:
-            guard let apiKey, !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            let effectiveAPIKey = apiKey ?? profile.fixedAPIKey
+            guard let effectiveAPIKey, !effectiveAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                 throw SwitcherError.missingAPIKey
             }
-            try setAnthropicCompatibleEnvironment(profile: profile, apiKey: apiKey)
+            try setAnthropicCompatibleEnvironment(profile: profile, apiKey: effectiveAPIKey)
         }
     }
 

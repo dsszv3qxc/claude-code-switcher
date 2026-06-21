@@ -104,11 +104,14 @@ struct ContentView: View {
     }
 
     private var backendContent: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            currentStatus
-            modeGrid
-            credentialPanel
-            footer
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                currentStatus
+                modeGrid
+                credentialPanel
+                footer
+            }
+            .padding(.trailing, 2)
         }
     }
 
@@ -158,6 +161,8 @@ struct ContentView: View {
                 Text(t("全局 Effort"))
                     .font(.caption.weight(.medium))
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
 
                 Picker("", selection: Binding(
                     get: { viewModel.selectedEffortLevel },
@@ -169,7 +174,7 @@ struct ContentView: View {
                     }
                 }
                 .pickerStyle(.segmented)
-                .frame(width: 330)
+                .frame(width: 300)
             }
 
             Text(AppStrings.effortHelp(viewModel.selectedEffortLevel, languageID: languageID))
@@ -221,6 +226,9 @@ struct ContentView: View {
                     .transition(.opacity)
             } else if viewModel.selectedProfile.needsAPIKey {
                 keySection
+                    .transition(.opacity)
+            } else if viewModel.selectedProfile.kind == .anthropicCompatible {
+                localBackendSection
                     .transition(.opacity)
             } else {
                 claudeCredentialSection
@@ -355,6 +363,38 @@ struct ContentView: View {
         }
     }
 
+    private var localBackendSection: some View {
+        HStack(spacing: 14) {
+            Image(systemName: "desktopcomputer")
+                .font(.system(size: 22, weight: .semibold))
+                .foregroundStyle(.green)
+                .frame(width: 40, height: 40)
+                .background(Color.green.opacity(0.10), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 5) {
+                Text(t("本地 Ollama 无需 API Key"))
+                    .font(.headline)
+                Text(t("使用 Ollama 官方 Anthropic 兼容接口；请保持 Ollama 正在运行。"))
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+
+            Spacer()
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 16)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+        .background {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Color(nsColor: .controlBackgroundColor))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(Color.green.opacity(0.24), lineWidth: 1)
+                }
+        }
+    }
+
     private var footer: some View {
         VStack(alignment: .leading, spacing: 17) {
             Divider()
@@ -362,6 +402,7 @@ struct ContentView: View {
             HStack(alignment: .center, spacing: 12) {
                 Button {
                     viewModel.refresh()
+                    viewModel.refreshOllamaProfiles()
                 } label: {
                     Label(t("刷新"), systemImage: "arrow.clockwise")
                 }
@@ -1238,6 +1279,9 @@ private extension BackendProfile {
         if id == BackendProfile.deepSeekFlash.id {
             return "bolt.fill"
         }
+        if id.hasPrefix("builtin.ollama.") {
+            return "desktopcomputer"
+        }
         return isBuiltIn ? "server.rack" : "slider.horizontal.3"
     }
 
@@ -1251,6 +1295,9 @@ private extension BackendProfile {
         if id == BackendProfile.deepSeekFlash.id {
             return .orange
         }
+        if id.hasPrefix("builtin.ollama.") {
+            return .green
+        }
         return .purple
     }
 
@@ -1263,6 +1310,9 @@ private extension BackendProfile {
         }
         if id == BackendProfile.deepSeekFlash.id {
             return "更快更省，适合日常"
+        }
+        if id.hasPrefix("builtin.ollama.") {
+            return "本地运行，无需云端 API"
         }
         return detail
     }

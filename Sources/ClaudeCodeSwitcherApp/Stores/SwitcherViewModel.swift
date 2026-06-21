@@ -4,6 +4,7 @@ import ClaudeCodeSwitcherCore
 @MainActor
 final class SwitcherViewModel: ObservableObject {
     @Published var backendProfiles: [BackendProfile] = BackendProfile.builtIns
+    @Published var ollamaProfiles: [BackendProfile] = []
     @Published var currentProfile: BackendProfile = .claudeSubscription
     @Published var selectedProfileID: BackendProfile.ID = BackendProfile.claudeSubscription.id
     @Published var isAddingCustomBackend = false
@@ -51,6 +52,7 @@ final class SwitcherViewModel: ObservableObject {
     private let skillManager: ClaudeSkillManager
     private let skillSummaryService: SkillSummaryService
     private let backendProfileStore: BackendProfileStore
+    private let ollamaProfileScanner: OllamaProfileScanner
 
     init(
         settingsStore: ClaudeSettingsStore = ClaudeSettingsStore(),
@@ -58,7 +60,8 @@ final class SwitcherViewModel: ObservableObject {
         versionChecker: ClaudeVersionChecker = ClaudeVersionChecker(),
         skillManager: ClaudeSkillManager = ClaudeSkillManager(),
         skillSummaryService: SkillSummaryService = SkillSummaryService(),
-        backendProfileStore: BackendProfileStore = BackendProfileStore()
+        backendProfileStore: BackendProfileStore = BackendProfileStore(),
+        ollamaProfileScanner: OllamaProfileScanner = OllamaProfileScanner()
     ) {
         self.settingsStore = settingsStore
         self.keychainStore = keychainStore
@@ -66,9 +69,11 @@ final class SwitcherViewModel: ObservableObject {
         self.skillManager = skillManager
         self.skillSummaryService = skillSummaryService
         self.backendProfileStore = backendProfileStore
+        self.ollamaProfileScanner = ollamaProfileScanner
         self.selectedSummaryProfileID = UserDefaults.standard.string(forKey: Self.summaryProfileDefaultsKey) ?? Self.summaryDisabledID
         loadBackendProfiles()
         refresh()
+        refreshOllamaProfiles()
         refreshSkills()
     }
 
@@ -136,7 +141,7 @@ final class SwitcherViewModel: ObservableObject {
     }
 
     var selectableSummaryProfiles: [BackendProfile] {
-        backendProfiles.filter(\.needsAPIKey)
+        backendProfiles.filter(\.supportsSkillSummaries)
     }
 
     func summaryProviderName(languageID: String) -> String {
@@ -179,6 +184,17 @@ final class SwitcherViewModel: ObservableObject {
             statusMessage = .currentMode(currentProfile)
         } catch {
             statusMessage = .raw(error.localizedDescription)
+        }
+    }
+
+    func refreshOllamaProfiles() {
+        Task {
+            let scanned = await ollamaProfileScanner.scanQwenProfiles()
+            await MainActor.run {
+                ollamaProfiles = scanned
+                loadBackendProfiles()
+                refresh()
+            }
         }
     }
 
@@ -335,8 +351,11 @@ final class SwitcherViewModel: ObservableObject {
         do {
             let profileToApply = try prepareSelectedProfileForApply()
             let keyForMode: String?
-            if !profileToApply.needsAPIKey {
+            if profileToApply.isClaudeSubscription {
                 keyForMode = nil
+            } else if let fixedAPIKey = profileToApply.fixedAPIKey,
+                      !fixedAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                keyForMode = fixedAPIKey
             } else {
                 let trimmed = (isAddingCustomBackend ? customBackendDraft.apiKey : apiKey)
                     .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -526,13 +545,13 @@ final class SwitcherViewModel: ObservableObject {
     private func loadBackendProfiles() {
         do {
             let customProfiles = try backendProfileStore.loadCustomProfiles()
-            backendProfiles = BackendProfile.builtIns + customProfiles
+            backendProfiles = BackendProfile.builtIns + ollamaProfiles + customProfiles
             if selectedSummaryProfileID != Self.summaryDisabledID,
-               !backendProfiles.contains(where: { $0.id == selectedSummaryProfileID && $0.needsAPIKey }) {
+               !backendProfiles.contains(where: { $0.id == selectedSummaryProfileID && $0.supportsSkillSummaries }) {
                 selectedSummaryProfileID = Self.summaryDisabledID
             }
         } catch {
-            backendProfiles = BackendProfile.builtIns
+            backendProfiles = BackendProfile.builtIns + ollamaProfiles
             statusMessage = .customBackendLoadFailed(error.localizedDescription)
         }
     }
@@ -554,7 +573,7 @@ final class SwitcherViewModel: ObservableObject {
         var customProfiles = backendProfiles.filter { !$0.isBuiltIn }
         customProfiles.append(profile)
         try backendProfileStore.saveCustomProfiles(customProfiles)
-        backendProfiles = BackendProfile.builtIns + customProfiles
+        backendProfiles = BackendProfile.builtIns + ollamaProfiles + customProfiles
         selectedProfileID = profile.id
         apiKey = customBackendDraft.apiKey
         return profile
@@ -612,7 +631,7 @@ final class SwitcherViewModel: ObservableObject {
             return
         }
 
-        guard let summaryProfile = backendProfiles.first(where: { $0.id == providerID && $0.needsAPIKey }) else {
+        guard let summaryProfile = backendProfiles.first(where: { $0.id == providerID && $0.supportsSkillSummaries }) else {
             isSummarizingSkills = false
             skillStatusMessage = .selectSummaryProvider
             return
@@ -620,8 +639,14 @@ final class SwitcherViewModel: ObservableObject {
 
         isSummarizingSkills = true
         skillStatusMessage = .generatingSummaries(profile: summaryProfile, count: targets.count)
+        let fixedKey = summaryProfile.fixedAPIKey?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let keyFromField = summaryProfile.id == selectedProfile.id ? apiKey.trimmingCharacters(in: .whitespacesAndNewlines) : ""
-        let summaryAPIKey = !keyFromField.isEmpty ? keyFromField : (try? keychainStore.readAPIKey(for: summaryProfile))
+        let summaryAPIKey: String?
+        if !fixedKey.isEmpty {
+            summaryAPIKey = fixedKey
+        } else {
+            summaryAPIKey = !keyFromField.isEmpty ? keyFromField : (try? keychainStore.readAPIKey(for: summaryProfile))
+        }
 
         Task {
             var needsKey = false
@@ -674,7 +699,7 @@ final class SwitcherViewModel: ObservableObject {
 
     private func loadCachedSkillSummaries(for records: [ClaudeSkillRecord], languageID: String) {
         guard selectedSummaryProfileID != Self.summaryDisabledID,
-              let summaryProfile = backendProfiles.first(where: { $0.id == selectedSummaryProfileID && $0.needsAPIKey }) else {
+              let summaryProfile = backendProfiles.first(where: { $0.id == selectedSummaryProfileID && $0.supportsSkillSummaries }) else {
             return
         }
 
